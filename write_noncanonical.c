@@ -91,6 +91,49 @@ int main(int argc, char *argv[])
     // Wait until all bytes have been written to the serial port
     sleep(1);
 
+    int nBytesBuf = 0;
+    unsigned char set_message[BUF_SIZE] = {0};
+    int flag_counter = 2;
+    while (STOP == FALSE)
+    {
+        unsigned char byte;
+        int bytes = readByteSerialPort(&byte);
+        
+        set_message[nBytesBuf] = byte;
+        nBytesBuf += bytes;
+
+        printf("Byte received: %c\n", byte);
+        
+        if (byte == FLAG)
+        {
+            flag_counter--;
+            printf("Received FLAG\n");
+            if (!flag_counter)
+            {
+                printf("Leaving loop\n");
+                STOP = TRUE;
+            }
+        }
+    }
+
+    if (set_message[0] == FLAG)
+    {
+        printf("\nFirst flag received correctly\n");
+    }
+
+    if (set_message[1]^set_message[2] == set_message[3])
+    {
+        printf("BCC received correctly\n");
+    } 
+
+    if (set_message[4] == FLAG)
+    {
+        printf("Last flag received correctly\n\n");
+    }
+
+    printf("Total bytes received: %d\n", nBytesBuf);
+
+
     // Close serial port
     if (closeSerialPort() < 0)
     {

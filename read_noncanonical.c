@@ -125,7 +125,9 @@ int main(int argc, char *argv[])
     ua_message[3]=ADDRESS_BY_SENDER ^ CONTROL_UA;
     ua_message[4]=FLAG;
 
-
+    int bytes = writeBytesSerialPort(ua_message, BUF_SIZE);
+    printf("%d bytes written to serial port\n", bytes);
+    sleep(1);
 
     // Close serial port
     if (closeSerialPort() < 0)
