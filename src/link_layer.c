@@ -10,17 +10,20 @@
 LinkLayer connectParam;
 int inf_frame_num = 0;
 
-int receive_packet(unsigned char *buf, setMessageState *state, int nbytes){
+int receive_packet(unsigned char *buf, setMessageState *state){
     volatile int STOP = FALSE;
     Packet packet;
     packet.cur_state = START;
-
-    while (nbytes--)
+    int bytes = 1;
+    while (connectParam.role == LlRx || (connectParam.role == LlTx && bytes == 1 ) )
     {
-        unsigned char byte;
-        int bytes = readByteSerialPort(&byte); //this might return -1, maybe check for that
+        unsigned char byte_rcv;
+        bytes = readByteSerialPort(&byte_rcv); //this might return -1, maybe check for that
+        if (bytes == -1){
+            return -1;
+        }
 
-        updateCurrentState(&packet, byte);
+        updateCurrentState(&packet, byte_rcv);
 
         /*
         printf("Byte received: %c\n", byte);
@@ -59,7 +62,7 @@ int send_packet(const unsigned char *send_buf, int bufSize, setMessageState *ret
     {
         unsigned char receive_buf;
         setMessageState cur_state;
-        receive_packet(&receive_buf, &cur_state, 5);
+        receive_packet(&receive_buf, &cur_state);
         
         if (cur_state == UA_RCV || cur_state == DISC_RCV || (cur_state == RR0_S && inf_frame_num == 1)  || (cur_state == RR1_S && inf_frame_num == 0) ){
             *ret_state = cur_state;
@@ -128,7 +131,7 @@ int llopen(LinkLayer connectionParameters)
     } else { //Receiver
         unsigned char buf[MAX_DATA_SIZE] = {0}; // Duvidassss!!!!!!!!!!
         
-        if (receive_packet(buf, &state, -1) != 0 || state != SET_RCV){
+        if (receive_packet(buf, &state) != 0 || state != SET_RCV){
             return -1;
         } 
         
@@ -207,7 +210,7 @@ int llread(unsigned char *packet) //
     setMessageState state;
     unsigned char buf[MAX_DATA_SIZE] = {0};
     
-    if (receive_packet(buf, &state, -1) != 0){
+    if (receive_packet(buf, &state) != 0){
         return -1;
     } 
 
