@@ -40,10 +40,10 @@ int receive_packet(unsigned char *buf, setMessageState *state, int nbytes){
     return 0;
 }
 
-//corrigir rej
-int send_packet(const unsigned char *send_buf, int bufSize, setMessageState *ret_state, setMessageState *exp_state, int state_size){ 
-    volatile int STOP = FALSE;
 
+int send_packet(const unsigned char *send_buf, int bufSize, setMessageState *ret_state){ 
+    volatile int STOP = FALSE;
+    
     struct sigaction act = {0};
     act.sa_handler = &alarmHandler;
     if (sigaction(SIGALRM, &act, NULL) == -1)
@@ -61,15 +61,23 @@ int send_packet(const unsigned char *send_buf, int bufSize, setMessageState *ret
         setMessageState cur_state;
         receive_packet(&receive_buf, &cur_state, 5);
         
-        for (int i = 0; i < state_size; i++){
-            if (exp_state[i] == cur_state){
-                *ret_state == cur_state;
-                STOP == TRUE;
-            }
+        if (cur_state == UA_RCV || cur_state == DISC_RCV || (cur_state == RR0_S && inf_frame_num == 1)  || (cur_state == RR1_S && inf_frame_num == 0) ){
+            *ret_state = cur_state;
+            alarm(0);
+            STOP = TRUE;
         }
 
         if (alarmCount < connectParam.nRetransmissions)
         {
+            if ((cur_state == REJ0_S && inf_frame_num == 0) || (cur_state == REJ1_S && inf_frame_num == 1)){
+                alarm(connectParam.timeout); 
+                alarmCount++;
+                alarmEnabled = TRUE;
+                int bytes = writeBytesSerialPort(send_buf, bufSize); // check -1
+                sleep(1);
+                continue;
+            }
+
             if (alarmEnabled == FALSE)
             {
                 alarm(connectParam.timeout); 
@@ -112,9 +120,8 @@ int llopen(LinkLayer connectionParameters)
         buf[3] = buf[1] ^ buf[2];
         buf[4] = FLAG;
         
-        setMessageState expected[1] = {UA_RCV};
         setMessageState ret_state;
-        if (send_packet(buf, 5, &ret_state, expected, 1) != 0){
+        if (send_packet(buf, 5, &ret_state) != 0){// Duvidassss!!!!!!!!!! Necessario dar check de ua?
             return -1;
         }
 
@@ -143,7 +150,7 @@ int llopen(LinkLayer connectionParameters)
 // LLWRITE
 ////////////////////////////////////////////////
 int llwrite(const unsigned char *data_buf, int data_bufSize)
-{ // corrigir rej
+{ 
     unsigned char packet_buf[MAX_PACKET_SIZE] = {0};
 
     packet_buf[0] = FLAG;
@@ -182,11 +189,10 @@ int llwrite(const unsigned char *data_buf, int data_bufSize)
         packet_buf[data_bufSize + 5] = FLAG;
     }
 
-    setMessageState acceptable_state[4]= {RR0_S,RR1_S,REJ0_S,REJ1_S};
     setMessageState ret_state = START;
 
     while (!(((ret_state == RR1_S) && (inf_frame_num == 0)) || ((ret_state == RR0_S) && (inf_frame_num == 1)))){
-        send_packet(packet_buf, MAX_PACKET_SIZE, &ret_state, acceptable_state, 4);
+        send_packet(packet_buf, MAX_PACKET_SIZE, &ret_state);
     }
 
     inf_frame_num ^= 1;
@@ -205,29 +211,79 @@ int llread(unsigned char *packet) //
         return -1;
     } 
 
+
     switch (state)
     {
     case RR0_S:
-        packet = buf;
+        // if inf_fram_num == 0 
+        // repeated packet was sent 
+        // wanted 0 received 1
+
+        // correct packet was sent
+        // wanted 1 received 1
+        if (inf_frame_num == 1)
+        { 
+            packet = buf;
+        }
+
         buf[2]=RR0;
         buf[3]=ADDRESS_BY_SENDER ^ RR0;
         break;
+
     case RR1_S:
-        packet = buf;
+        // correct packet was sent 
+        // wanted 0 received 0
+        if (inf_frame_num == 0){
+            packet = buf;
+        }
+
+        // if inf_fram_num == 1 
+        // repeated packet was sent 
+        // wanted 1 received 0
+
         buf[2]=RR1;
         buf[3]=ADDRESS_BY_SENDER ^ RR1;
         break;
 
     case REJ0_S:
-        buf[2]=REJ0;
-        buf[3]=ADDRESS_BY_SENDER ^ REJ0;
+
+        // faulty packet was sent 
+        // wanted 0 received incorrect 0
+        if (inf_frame_num == 0){
+            buf[2]=REJ0;
+            buf[3]=ADDRESS_BY_SENDER ^ REJ0;
+        } 
+
+        // if inf_fram_num == 1 
+        // faulty packet sent was a duplicate 
+        // wanted 1 received 0 (already has correct 0)
+        else 
+        {
+            buf[2]=RR1;
+            buf[3]=ADDRESS_BY_SENDER ^ RR1;
+        }
         break;    
+
     case REJ1_S:
-        buf[2]=REJ1;
-        buf[3]=ADDRESS_BY_SENDER ^ REJ1;
+        // if inf_fram_num == 0
+        // faulty packet sent was a duplicate 
+        // wanted 0 received 1 (already has correct 1)
+        if (inf_frame_num == 0){
+            buf[2]=RR0;
+            buf[3]=ADDRESS_BY_SENDER ^ RR0;            
+        } 
+
+        // if inf_fram_num == 1
+        // faulty packet was sent
+        // wanted 1 received faulty 1
+        else 
+        {
+            buf[2]=REJ1;
+            buf[3]=ADDRESS_BY_SENDER ^ REJ1;
+        }
+
         break;    
-    case DISC_RCV:
-        return 1;
+
     default:
         return -1;
     }
@@ -254,9 +310,8 @@ int llclose()
     buf[3] = buf[1] ^ buf[2];
     buf[4] = FLAG;
     
-    setMessageState expected[1] = {DISC_RCV};
     setMessageState ret_state;
-    if (send_packet(buf, 5, &ret_state, expected, 1) != 0){
+    if (send_packet(buf, 5, &ret_state) != 0){
         return -1;
     }
     buf[2] = CONTROL_UA;

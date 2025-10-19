@@ -111,6 +111,7 @@ int updateCurrentState(Packet *packet, unsigned char byte){
                 }
             } 
 
+            // byte destuffing
             if ((last_data_byte == ESC) && (last_esc == 0)){
                 last_esc = 1;
                 last_data_byte = byte ^ XOR_OP;
@@ -121,7 +122,10 @@ int updateCurrentState(Packet *packet, unsigned char byte){
                 last_esc = 0;
             }
         
-            if (data_counter > MAX_DATA_SIZE){ //more data than expected
+            
+            // more data than expected
+            // should never happen DUVIDAAAA!!!!!!!!!
+            if (data_counter > MAX_DATA_SIZE){ 
                 if (packet->control == I0){
                     packet->cur_state = REJ0_S;
                 } else if (packet->control == I1){
