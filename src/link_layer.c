@@ -19,6 +19,7 @@ int receive_packet(unsigned char *buf, setMessageState *state){
         unsigned char byte_rcv;
         bytes = readByteSerialPort(&byte_rcv); //this might return -1, maybe check for that
         if (bytes == -1){
+            perror("Failed to receive packet\n");
             return -1;
         }
 
@@ -94,6 +95,7 @@ int send_packet(const unsigned char *send_buf, int bufSize, setMessageState *ret
         } 
         else 
         {
+            perror("Failed to send packet\n");
             return -1;
         }
     }
@@ -128,6 +130,7 @@ int llopen(LinkLayer connectionParameters)
         
         setMessageState ret_state;
         if (send_packet(buf, 5, &ret_state) != 0){// Duvidassss!!!!!!!!!! Necessario dar check de ua?
+            perror("Failed to receive packet in llopen of the transmiter\n");
             return -1;
         }
         printf("sent packet\n");
@@ -137,6 +140,7 @@ int llopen(LinkLayer connectionParameters)
         unsigned char buf[MAX_DATA_SIZE] = {0}; // Duvidassss!!!!!!!!!!
         
         if (receive_packet(buf, &state) != 0 || state != SET_RCV){
+            perror("Failed to receive packet in llopen of the receiver\n");
             return -1;
         } 
         printf("received packet\n");
@@ -220,9 +224,9 @@ int llread(unsigned char *packet) //
     unsigned char buf[MAX_DATA_SIZE] = {0};
     
     if (receive_packet(buf, &state) != 0){
+        perror("Failed to receive packet in llread\n");
         return -1;
     } 
-
 
     switch (state)
     {
@@ -297,6 +301,7 @@ int llread(unsigned char *packet) //
         break;    
 
     default:
+        perror("Failed to identify the state in llread\n");
         return -1;
     }
 
@@ -324,6 +329,7 @@ int llclose()
     
     setMessageState ret_state;
     if (send_packet(buf, 5, &ret_state) != 0){
+        perror("Failed to send packet in llclose\n");
         return -1;
     }
     buf[2] = CONTROL_UA;
