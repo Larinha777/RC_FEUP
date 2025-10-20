@@ -27,7 +27,7 @@ int writeFile(FILE *fptr, unsigned char *data, unsigned char data_size){
 }
 
 int parsePck(unsigned char *packet, unsigned char packet_size, char *filename, char *file_size){
-    if(packet[0] == 1){ // packet control START
+    if(packet[0] == 1){ // packet control START 
         int p_index = 1; 
         while(p_index < packet_size){
             unsigned char T = packet[p_index++];
