@@ -45,7 +45,7 @@ int updateCurrentState(Packet *packet, unsigned char byte){
                 packet->cur_state = FLAG_RCV;
                 return 0;
             }
-            if (packet->address ^ packet->control == byte){
+            if ((packet->address ^ packet->control) == byte){
                 packet->cur_state = BCC_OK;
                 return 0;
             } 

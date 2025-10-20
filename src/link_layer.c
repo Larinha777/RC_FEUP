@@ -11,7 +11,6 @@ LinkLayer connectParam;
 int inf_frame_num = 0;
 
 int receive_packet(unsigned char *buf, setMessageState *state){
-    volatile int STOP = FALSE;
     Packet packet;
     packet.cur_state = START;
     int bytes = 1;
@@ -33,10 +32,10 @@ int receive_packet(unsigned char *buf, setMessageState *state){
         if (packet.cur_state == SET_RCV || packet.cur_state == UA_RCV || packet.cur_state == DISC_RCV
             || packet.cur_state == REJ0_S || packet.cur_state == REJ1_S )
         {
-            STOP = TRUE;
+            break;
         } else if (packet.cur_state == RR0_S || packet.cur_state == RR1_S){
             buf = packet.data;
-            STOP = TRUE;
+            break;
         } 
     }
     *state = packet.cur_state;
@@ -55,8 +54,11 @@ int send_packet(const unsigned char *send_buf, int bufSize, setMessageState *ret
         return -1;
     }
 
-    int bytes = writeBytesSerialPort(send_buf, bufSize); // check -1
+    writeBytesSerialPort(send_buf, bufSize); // check -1
     sleep(1);
+
+    printf("sent first try\n");
+
 
     while (STOP == FALSE)
     {
@@ -76,7 +78,7 @@ int send_packet(const unsigned char *send_buf, int bufSize, setMessageState *ret
                 alarm(connectParam.timeout); 
                 alarmCount++;
                 alarmEnabled = TRUE;
-                int bytes = writeBytesSerialPort(send_buf, bufSize); // check -1
+                writeBytesSerialPort(send_buf, bufSize); // check -1
                 sleep(1);
                 continue;
             }
@@ -86,7 +88,7 @@ int send_packet(const unsigned char *send_buf, int bufSize, setMessageState *ret
                 alarm(connectParam.timeout); 
                 alarmEnabled = TRUE;
                 
-                int bytes = writeBytesSerialPort(send_buf, bufSize); // check -1
+                writeBytesSerialPort(send_buf, bufSize); // check -1
                 sleep(1);
             }
         } 
@@ -109,6 +111,7 @@ int llopen(LinkLayer connectionParameters)
         perror("openSerialPort");
         return -1;
     }
+    printf("opened serial port\n");
 
     connectParam = connectionParameters;
 
@@ -127,6 +130,8 @@ int llopen(LinkLayer connectionParameters)
         if (send_packet(buf, 5, &ret_state) != 0){// Duvidassss!!!!!!!!!! Necessario dar check de ua?
             return -1;
         }
+        printf("sent packet\n");
+
 
     } else { //Receiver
         unsigned char buf[MAX_DATA_SIZE] = {0}; // Duvidassss!!!!!!!!!!
@@ -134,7 +139,9 @@ int llopen(LinkLayer connectionParameters)
         if (receive_packet(buf, &state) != 0 || state != SET_RCV){
             return -1;
         } 
-        
+        printf("received packet\n");
+
+
         buf[0] = FLAG;
         buf[1] = ADDRESS_BY_SENDER;
         buf[2] = CONTROL_UA;
@@ -142,6 +149,8 @@ int llopen(LinkLayer connectionParameters)
         buf[4] = FLAG;
 
         writeBytesSerialPort(buf, 5); // check -1
+        printf("sent ua packet\n");
+
         sleep(1);
 
     }
