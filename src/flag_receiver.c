@@ -6,6 +6,7 @@ unsigned char last_data_byte;
 int last_esc = 0;
 
 int updateCurrentState(Packet *packet, unsigned char byte){
+
     switch (packet->cur_state)
     {
         case START:
@@ -86,6 +87,7 @@ int updateCurrentState(Packet *packet, unsigned char byte){
                 data_bcc = byte;
                 last_data_byte = byte;
                 data_counter = 0;
+                packet->data_size = 0;
 
                 packet->cur_state = DATA_RCV;
                 return 0;
@@ -95,6 +97,7 @@ int updateCurrentState(Packet *packet, unsigned char byte){
         case DATA_RCV:
             if (byte == FLAG){
                 if (data_bcc == 0){
+                    packet->data_size = data_counter;
                     if (packet->control == I0){
                         packet->cur_state = RR1_S;
                     } else if (packet->control == I1){
@@ -118,6 +121,7 @@ int updateCurrentState(Packet *packet, unsigned char byte){
             } else {
                 data_bcc ^= byte;
                 packet->data[data_counter] = last_data_byte;
+                last_data_byte = byte;
                 data_counter ++;
                 last_esc = 0;
             }
