@@ -112,7 +112,7 @@ int openFile(const char *filename, FILE **fptr){
 } 
 
 int readFragFile(FILE *fptr, unsigned char *data, int data_size){
-    int size_read = (unsigned char) fread(data, 1, data_size, fptr);
+    int size_read = fread(data, 1, data_size, fptr);
 
     if(size_read < 0){
         return -1;
@@ -177,7 +177,10 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     
     // open connection 
     // done by both Tx and Rx
-    llopen(connectionParameters);
+    if (llopen(connectionParameters) == -1){
+        perror("Could not open connection\n");
+        return;
+    }
     
     printf("-llopen complete\n");
 
@@ -266,7 +269,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         int i = 1;
         while (TRUE /*ha cenas no ficheiro*/){
             frag_file_res = readFragFile(file, data_buf, data_buf_size);
-            printf("-%d Read frag file \n", i);
+            printf("-%d Read frag file with size %d, %d\n", i, data_buf_size, frag_file_res);
             if(frag_file_res < 1) break;
             buildDataPck(packet, &packet_size, data_buf, &frag_file_res); 
             printf("-Just built data pack 1 with %d bytes\n", packet_size);
