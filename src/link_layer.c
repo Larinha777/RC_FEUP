@@ -18,9 +18,7 @@ int receive_packet(unsigned char *buf, setMessageState *state){
     while (connectParam.role == LlRx || (connectParam.role == LlTx && bytes == 1 ) )
     {
         unsigned char byte_rcv;
-        printf("bytes: %d, role: %d\n", bytes, connectParam.role);        
         bytes = readByteSerialPort(&byte_rcv); //this might return -1, maybe check for that
-        printf("after - bytes: %d\n", bytes);
 
         if (bytes == -1){
             perror("Failed to receive byte\n");
@@ -31,7 +29,7 @@ int receive_packet(unsigned char *buf, setMessageState *state){
             perror("Error updating state\n");
             return -1;
         }
-        printf("State: %d\n", packet.cur_state);
+        // printf("State: %d\n", packet.cur_state);
 
         if (packet.cur_state == SET_RCV || packet.cur_state == UA_RCV || packet.cur_state == DISC_RCV
             || packet.cur_state == REJ0_S || packet.cur_state == REJ1_S )
@@ -91,12 +89,12 @@ int send_packet(const unsigned char *send_buf, int bufSize, setMessageState *ret
             printf("Error on receiving bytes\n");
             return -1;
         }
-        printf("Hello here #%d\n", alarmCount);
+        printf("Alarm count #%d\n", alarmCount);
         
         if (cur_state == UA_RCV || cur_state == DISC_RCV || (cur_state == RR0_S && inf_frame_num == 1)  || (cur_state == RR1_S && inf_frame_num == 0) ){
             *ret_state = cur_state;
             alarm(0);
-            printf("Received Confirmation pck was sent\n");
+            printf("Receved confirmation pck\n");
             return bufSize;
             // STOP = TRUE;
             // break;
@@ -178,7 +176,7 @@ int llopen(LinkLayer connectionParameters)
         
         setMessageState ret_state;
         printf("Send set \n");
-        if (send_packet(buf, 5, &ret_state) != 0){// Duvidassss!!!!!!!!!! Necessario dar check de ua?
+        if (send_packet(buf, 5, &ret_state) == -1){// Duvidassss!!!!!!!!!! Necessario dar check de ua?
             perror("Failed to receive packet in llopen of the transmiter\n");
             return -1;
         }
@@ -272,16 +270,18 @@ int llwrite(const unsigned char *data_buf, int data_bufSize)
     setMessageState ret_state = START;
     
     printf("Will start to send the packet I%d\n", inf_frame_num);
+    
+    // devia haver aqui umm while ???
     while (!(((ret_state == RR1_S) && (inf_frame_num == 0)) || ((ret_state == RR0_S) && (inf_frame_num == 1)))){
         if (send_packet(packet_buf, pck_p, &ret_state) == -1){
             perror("Error receiving packets in llwrite\n");
             return -1;
         }
-        printf("Successfully sent Packet I%d\n", inf_frame_num);
     }
+    printf("Successfully sent Packet I%d\n", inf_frame_num);
 
     inf_frame_num ^= 1;
-    return pck_p;
+    return data_p;
 }
 
 ////////////////////////////////////////////////
@@ -296,7 +296,7 @@ int llread(unsigned char *packet) //
         perror("Failed to receive data in llread\n");
         return -1;
     } 
-
+    // printf("llread received %d bytes of data and reached %d state, with inf n %d\n", buf_size, state, inf_frame_num);
     unsigned char send_msg[5] = {0};
     send_msg[0]=FLAG;
     send_msg[1]=ADDRESS_BY_SENDER;
@@ -382,8 +382,9 @@ int llread(unsigned char *packet) //
         perror("Failed to identify the state in llread\n");
         return -1;
     }
-
+    
     int written_bytes = writeBytesSerialPort(send_msg, 5);
+    //printf("llread will return %d bytes and sent the ok msg\n", bytes_returned);
     if (written_bytes == -1){
         perror("No bytes written\n");
         return -1;        
@@ -393,6 +394,7 @@ int llread(unsigned char *packet) //
     }
 
     sleep(1);
+    inf_frame_num ^= 1;
     return bytes_returned;
 }
 
