@@ -68,6 +68,7 @@ int send_packet(const unsigned char *send_buf, int bufSize, setMessageState *ret
     }
 
     int written_bytes = writeBytesSerialPort(send_buf, bufSize);
+    printf("Sent try #%d\n", alarmCount);
     if (written_bytes == -1){
         perror("No bytes written\n");
         return -1;        
@@ -78,23 +79,19 @@ int send_packet(const unsigned char *send_buf, int bufSize, setMessageState *ret
 
     sleep(1);
 
-    printf("Sent try #%d\n", alarmCount);
-
     while (STOP == FALSE)
     {
         unsigned char receive_buf;
         setMessageState cur_state;
         int bytes_read = receive_packet(&receive_buf, &cur_state);
         if (bytes_read == -1){
-            printf("Error on receiving bytes\n");
+            perror("Error on receiving bytes\n");
             return -1;
         }
-        printf("Alarm count #%d\n", alarmCount);
         
         if (cur_state == UA_RCV || cur_state == DISC_RCV || (cur_state == RR0_S && inf_frame_num == 1)  || (cur_state == RR1_S && inf_frame_num == 0) ){
             *ret_state = cur_state;
             alarm(0);
-            printf("Receved confirmation pck\n");
             return bufSize;
             // STOP = TRUE;
             // break;
@@ -109,6 +106,8 @@ int send_packet(const unsigned char *send_buf, int bufSize, setMessageState *ret
                 alarmEnabled = TRUE;
 
                 int written_bytes = writeBytesSerialPort(send_buf, bufSize);
+                printf("Sent try #%d\n", alarmCount);
+
                 if (written_bytes == -1){
                     perror("No bytes written\n");
                     return -1;        
@@ -118,18 +117,16 @@ int send_packet(const unsigned char *send_buf, int bufSize, setMessageState *ret
                 } 
             
                 sleep(1);
-                printf("Sent try #%d\n", alarmCount);
-
                 continue;
             }
 
             if (alarmEnabled == FALSE)
             {
-                printf("Sent try #%d\n", alarmCount);
                 alarm(connectParam.timeout); 
                 alarmEnabled = TRUE;
                 
                 int written_bytes = writeBytesSerialPort(send_buf, bufSize);
+                printf("Sent try #%d\n", alarmCount);
                 if (written_bytes == -1){
                     perror("No bytes written\n");
                     return -1;        
@@ -175,11 +172,11 @@ int llopen(LinkLayer connectionParameters)
         buf[4] = FLAG;
         
         setMessageState ret_state;
-        printf("Send set \n");
         if (send_packet(buf, 5, &ret_state) == -1){// Duvidassss!!!!!!!!!! Necessario dar check de ua?
             perror("Failed to receive packet in llopen of the transmiter\n");
             return -1;
         }
+        printf("Send set and received ua\n");
 
 
     } else { //Receiver
@@ -189,7 +186,7 @@ int llopen(LinkLayer connectionParameters)
             perror("Failed to receive packet in llopen of the receiver\n");
             return -1;
         } 
-        printf("received set\n");
+        printf("Received Set\n");
 
 
         buf[0] = FLAG;
@@ -219,7 +216,6 @@ int llopen(LinkLayer connectionParameters)
 ////////////////////////////////////////////////
 int llwrite(const unsigned char *data_buf, int data_bufSize)
 { 
-    printf("Size of data in packet %d\n", data_bufSize);
     if (data_buf == NULL){
         perror("Poiter to the date is NULL in llwrite\n");
         return -1;
@@ -292,6 +288,7 @@ int llread(unsigned char *packet) //
     setMessageState state;
     unsigned char buf[MAX_DATA_SIZE] = {0};
     int buf_size = receive_packet(buf, &state);
+    printf("Size of packet in llread %d\n", buf_size);
     if ( buf_size == -1){
         perror("Failed to receive data in llread\n");
         return -1;

@@ -10,7 +10,6 @@
 #define FILE_NAME "penguin-received.gif"
 
 void print_pck(unsigned char *packet, unsigned char packet_size){
-    printf("Size of packet: %d\n", packet_size);
     for(int i = 0; i < packet_size; i++){
         printf("var = 0x%02X\n", packet[i]);
     }
@@ -56,7 +55,7 @@ int writeFile(FILE *fptr, unsigned char *data, unsigned char data_size){
 
 //to do reviews
 int parsePck(unsigned char *packet, unsigned char packet_size, char *filename, int *file_size){
-    printf("packet first byte in parse pack %d\n", packet[0]);
+    printf("-Packet first byte in parse pack %d\n", packet[0]);
     if(packet[0] == 1){ // packet control START
         int p_index = 1; 
         while(p_index < packet_size){
@@ -88,6 +87,7 @@ int parsePck(unsigned char *packet, unsigned char packet_size, char *filename, i
 }
 
 int extractDataPck(unsigned char *packet, unsigned char packet_size, unsigned char *data, unsigned char *data_size){
+    print_pck(packet, packet_size);
     if(packet[0] == 2){
         *data_size = 256 * packet[1] + packet[2];
         if(packet_size != *data_size + 3 ) return -1;
@@ -120,7 +120,7 @@ int readFragFile(FILE *fptr, unsigned char *data, int data_size){
     return size_read;
 } 
 
-void buildCtrlPck(unsigned char *packet[], int *packet_size, 
+void buildCtrlPck(unsigned char *packet, int *packet_size, 
             unsigned char control_field, int param_count,
             unsigned char *T, unsigned char *L, const char **V){
                 
@@ -129,32 +129,29 @@ void buildCtrlPck(unsigned char *packet[], int *packet_size,
     for (int i = 0; i < param_count; i++){
         *packet_size += 2 + L[i];
     }
-    *packet = (unsigned char*) malloc(*packet_size);
 
     //Get packet
     int p_index = 0;
-    (*packet)[p_index] = control_field;
+    (packet)[p_index] = control_field;
     p_index ++;
     for (int i = 0; i < param_count; i++){
-        (*packet)[p_index] = T[i];
-        (*packet)[p_index + 1] = L[i];
-        memcpy((*packet) + (p_index + 2),V[i], L[i]);
+        (packet)[p_index] = T[i];
+        (packet)[p_index + 1] = L[i];
+        memcpy((packet) + (p_index + 2),V[i], L[i]);
         return;
         p_index += L[i] + 2;
     }  
-    printf("Inside buildCtrlPck, packet = %p, packet_size = %d \n", *packet, *packet_size);
 } 
 
-void buildDataPck(unsigned char **packet, int *packet_size, unsigned char *data, int *data_size){
+void buildDataPck(unsigned char *packet, int *packet_size, unsigned char *data, int *data_size){
     // Get packet size            
     *packet_size = *data_size + 3;
-    *packet = malloc(*packet_size);
 
     //Create packet
-    (*packet)[0] = 2;
-    (*packet)[1] = *data_size >> 8;
-    (*packet)[2] = *data_size & 0x0FF;
-    memcpy((*packet+3),data, *data_size);
+    (packet)[0] = 2;
+    (packet)[1] = *data_size >> 8;
+    (packet)[2] = *data_size & 0x0FF;
+    memcpy(&packet[3],data, *data_size);
 } 
 
 void closeFile(FILE *fptr){
@@ -182,11 +179,11 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     // done by both Tx and Rx
     llopen(connectionParameters);
     
-    printf("opened connection\n");
+    printf("-llopen complete\n");
 
     
     if (connectionParameters.role == LlRx){ //Rx
-        printf("reached rx in app layer\n");
+        printf("-Reached rx in app layer\n");
         
         unsigned char packet[MAX_PAYLOAD_SIZE];
         char filename_rcv[] = FILE_NAME;
@@ -198,7 +195,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             packet_size = llread(packet); // gets start packet
             if(packet_size == -1) return;
             else if (packet_size == 0) continue;
-            printf("Read 1 packet(prob start)\n");
+            printf("-Read 1 packet(prob start)\n");
             parse_res = parsePck(packet, packet_size, filename_rcv, &file_size);
             if(parse_res == -1){
                 perror("Could not parse packet received\n");
@@ -210,10 +207,12 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         FILE *fptr = NULL;
         if (createFile(&fptr, (unsigned char *)filename_rcv) == -1) return;
         unsigned char data[MAX_PAYLOAD_SIZE] = {0}, data_size;
-        
+        int i = 1;
         while(TRUE){
             packet_size = llread(packet); 
-            printf("Packet size in app layer: %d\n", packet_size);
+            printf("-%dPacket size in app layer: %d\n", i, packet_size);
+            i++;
+            if (i==7) return;
             if(packet_size == -1) return;
             if(packet_size == 0) continue;
             parse_res = parsePck(packet, packet_size, filename_rcv, &file_size);
@@ -223,25 +222,22 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                     perror("Failed to extract data \n");
                     return;
                 }
-                print_pck(data, data_size);
-                printf("Extracted data\n");
+                //print_pck(data, data_size);
+                printf("-Extracted data\n");
             }
             if (parse_res == 3) break;           
             if(writeFile(fptr, data, data_size) == -1) return;
-            
-            //printf("Successfully got first file frag and wrote it on the file, Im terminating the prog here\n");
-            //return;
         }
         //llclose(); 
 
     } else { //Tx
-        printf("reached tx in app layer\n");
+        printf("-Reached tx in app layer\n");
 
         FILE * file = NULL;
         if (openFile(filename, &file) == -1) return;
 
         // Create start packet
-        unsigned char *packet = NULL;
+        unsigned char packet[MAX_PAYLOAD_SIZE] = {0} ;
         int packet_size;
         
         // Get file size
@@ -251,18 +247,15 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         int file_total_size = st.st_size;
         static char size_str[32];
         snprintf(size_str, sizeof(size_str), "%d", file_total_size);
-        // printf ("Size of the pckt: %s\n, -> %ld; filename %s and size %ld \n", size_str, sizeof(file_size), filename, sizeof(filename));
 
         unsigned char T[2] = {0,1};
         unsigned char L[2] = {strlen(filename), sizeof(file_total_size)}; //CONFIRMAR se é strlen ou sizeof no filename
         const char *V[2] = {filename, size_str};
 
-        buildCtrlPck(&packet, &packet_size, 1, 2, T, L, V);
-        //printf("Size of packet START: %d, first byte of packet %d\n", packet_size, packet[0]);
+        buildCtrlPck(packet, &packet_size, 1, 2, T, L, V);
 
-        printf("Built start packet\n");
-        print_pck(packet, packet_size);
-        
+        printf("-Built start packet\n");
+
         if (llwrite(packet, packet_size) == -1){
             perror("Could not send START packet\n");
             return;
@@ -270,20 +263,18 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
         int data_buf_size = MAX_PAYLOAD_SIZE - 3, frag_file_res ;
         unsigned char data_buf[MAX_PAYLOAD_SIZE - 3] = {0}; 
-        
+        int i = 1;
         while (TRUE /*ha cenas no ficheiro*/){
             frag_file_res = readFragFile(file, data_buf, data_buf_size);
-            printf("Read frag file\n");
+            printf("-%d Read frag file \n", i);
             if(frag_file_res < 1) break;
-            buildDataPck(&packet, &packet_size, data_buf, &frag_file_res); 
-            printf("Just built data pack 1 with %d bytes", packet_size);
-            print_pck(packet, packet_size);
+            buildDataPck(packet, &packet_size, data_buf, &frag_file_res); 
+            printf("-Just built data pack 1 with %d bytes\n", packet_size);
             llwrite(packet, packet_size);
-            //printf("Successfully sent Start and first packet, Im terminating the prog here\n");
-            //return;
+            i++;
         }
 
-        buildCtrlPck(&packet, &packet_size, 3, 2, T, L, V);
+        buildCtrlPck(packet, &packet_size, 3, 2, T, L, V);
         llwrite(packet, packet_size);
 
         llclose();
