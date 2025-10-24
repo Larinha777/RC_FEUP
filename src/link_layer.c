@@ -16,19 +16,19 @@ int receive_packet(unsigned char *buf, setMessageState *state){
     packet.data_size = 0;
     int bytes;
     unsigned char byte_rcv;
-
     while (TRUE)
     {
         bytes = readByteSerialPort(&byte_rcv); //this might return -1, maybe check for that
         if (bytes == -1){
-            break;;
+            break;
         }
-
+        //printf("bytes = 0x%02X\n", byte_rcv);
         if (updateCurrentState(&packet, byte_rcv) == -1){
             perror("Error updating state\n");
             return -1;
         }
-        
+        // printf("Received byte: 0x%02X state:%d\n", byte_rcv, packet.cur_state);
+
         if (packet.cur_state == SET_RCV || packet.cur_state == UA_RCV || packet.cur_state == DISC_RCV
             || packet.cur_state == REJ0_S || packet.cur_state == REJ1_S )
         {
@@ -241,14 +241,11 @@ int llwrite(const unsigned char *data_buf, int data_bufSize)
         perror("Error receiving packets in llwrite\n");
         return -1;
     }
-    if (!(((ret_state == RR1_S) && (inf_frame_num == 0)) || ((ret_state == RR0_S) && (inf_frame_num == 1)))){
-        perror("Failed to receive correct rr");
-        return -1;
-    } else {
-        printf("Successfully sent Packet I%d\n", inf_frame_num);
-        inf_frame_num ^= 1;
-        return data_p;
-    }
+
+    printf("Successfully sent Packet I%d\n", inf_frame_num);
+    inf_frame_num ^= 1;
+    return data_p;
+    
 }
 
 ////////////////////////////////////////////////

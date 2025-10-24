@@ -84,7 +84,7 @@ int updateCurrentState(Packet *packet, unsigned char byte){
             }
             if (packet->control == I0 || packet->control == I1){
                 
-                data_bcc = byte;
+                data_bcc = 0;
                 last_data_byte = byte;
                 data_counter = 0;
                 packet->data_size = 0;
@@ -96,7 +96,7 @@ int updateCurrentState(Packet *packet, unsigned char byte){
             
         case DATA_RCV:
             if (byte == FLAG){
-                if (data_bcc == 0){
+                if (data_bcc == last_data_byte){
                     packet->data_size = data_counter;
                     if (packet->control == I0){
                         packet->cur_state = RR1_S;
@@ -119,7 +119,8 @@ int updateCurrentState(Packet *packet, unsigned char byte){
                 last_esc = 1;
                 last_data_byte = byte ^ XOR_OP;
             } else {
-                data_bcc ^= byte;
+                data_bcc ^= last_data_byte;
+                //printf("Data BCC: %d\n", data_bcc);
                 packet->data[data_counter] = last_data_byte;
                 last_data_byte = byte;
                 data_counter ++;
@@ -130,6 +131,7 @@ int updateCurrentState(Packet *packet, unsigned char byte){
             // more data than expected
             // should never happen DUVIDAAAA!!!!!!!!!
             if (data_counter > MAX_DATA_SIZE){ 
+                printf("Received more data than expected\n");
                 if (packet->control == I0){
                     packet->cur_state = REJ0_S;
                 } else if (packet->control == I1){

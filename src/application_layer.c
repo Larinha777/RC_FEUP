@@ -9,7 +9,7 @@
 
 #define FILE_NAME "penguin-received.gif"
 
-void print_pck(unsigned char *packet, unsigned char packet_size){
+void print_pck(unsigned char *packet, int packet_size){
     for(int i = 0; i < packet_size; i++){
         printf("var = 0x%02X\n", packet[i]);
     }
@@ -31,7 +31,7 @@ int createFile(FILE **fptr, unsigned char *filename){ //hardcoded for project
     return 0;
 } 
 
-int writeFile(FILE *fptr, unsigned char *data, unsigned char data_size){
+int writeFile(FILE *fptr, unsigned char *data, int data_size){
     if (fptr == NULL){
         perror("File pointer is null in writeFile\n");
         return -1;
@@ -54,7 +54,7 @@ int writeFile(FILE *fptr, unsigned char *data, unsigned char data_size){
 }
 
 //to do reviews
-int parsePck(unsigned char *packet, unsigned char packet_size, char *filename, int *file_size){
+int parsePck(unsigned char *packet, int packet_size, char *filename, int *file_size){
     printf("-Packet first byte in parse pack %d\n", packet[0]);
     if(packet[0] == 1){ // packet control START
         int p_index = 1; 
@@ -86,8 +86,8 @@ int parsePck(unsigned char *packet, unsigned char packet_size, char *filename, i
     return -1;
 }
 
-int extractDataPck(unsigned char *packet, unsigned char packet_size, unsigned char *data, unsigned char *data_size){
-    print_pck(packet, packet_size);
+int extractDataPck(unsigned char *packet, int packet_size, unsigned char *data, int *data_size){
+    // print_pck(packet, packet_size);
     if(packet[0] == 2){
         *data_size = 256 * packet[1] + packet[2];
         if(packet_size != *data_size + 3 ) return -1;
@@ -158,6 +158,31 @@ void closeFile(FILE *fptr){
     fclose(fptr);
 }
 
+void testConnection(LinkLayer connectionParameters){
+    unsigned char test_msg[] = "Hello, this is a test message!";
+    unsigned char rcv_buf[100] = {0};
+    int msg_size = sizeof(test_msg);
+
+    if (connectionParameters.role == LlTx){
+        printf("-Tx: Sending test message\n");
+        if (llwrite(test_msg, msg_size) == -1){
+            perror("Could not send test message\n");
+            return;
+        }
+        printf("-Tx: Test message sent\n");
+    } else if (connectionParameters.role == LlRx){
+        printf("-Rx: Waiting to receive test message\n");
+        int rcv_size = llread(rcv_buf);
+        if (rcv_size == -1){
+            perror("Could not receive test message\n");
+            return;
+        }
+        printf("-Rx: Test message received: %.*s\n", rcv_size, rcv_buf);
+    }
+}
+
+
+
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
 {
@@ -184,7 +209,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     
     printf("-llopen complete\n");
 
-    
+    // testConnection(connectionParameters);
+    // return;
+
     if (connectionParameters.role == LlRx){ //Rx
         printf("-Reached rx in app layer\n");
         
@@ -193,7 +220,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         int file_size = 0;
 
         int parse_res = 0;
-        unsigned char packet_size;
+        int packet_size;
         do{
             packet_size = llread(packet); // gets start packet
             if(packet_size == -1) return;
@@ -209,13 +236,11 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         
         FILE *fptr = NULL;
         if (createFile(&fptr, (unsigned char *)filename_rcv) == -1) return;
-        unsigned char data[MAX_PAYLOAD_SIZE] = {0}, data_size;
-        int i = 1;
+        unsigned char data[MAX_PAYLOAD_SIZE] = {0};
+        int data_size;
         while(TRUE){
             packet_size = llread(packet); 
-            printf("-%dPacket size in app layer: %d\n", i, packet_size);
-            i++;
-            if (i==7) return;
+            // printf("-Packet size in app layer: %d\n", packet_size);
             if(packet_size == -1) return;
             if(packet_size == 0) continue;
             parse_res = parsePck(packet, packet_size, filename_rcv, &file_size);
@@ -264,8 +289,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             return;
         }
 
-        int data_buf_size = MAX_PAYLOAD_SIZE - 3, frag_file_res ;
-        unsigned char data_buf[MAX_PAYLOAD_SIZE - 3] = {0}; 
+        int data_buf_size = MAX_PAYLOAD_SIZE - 4, frag_file_res ;
+        unsigned char data_buf[MAX_PAYLOAD_SIZE - 4] = {0}; 
         int i = 1;
         while (TRUE /*ha cenas no ficheiro*/){
             frag_file_res = readFragFile(file, data_buf, data_buf_size);
@@ -273,7 +298,11 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             if(frag_file_res < 1) break;
             buildDataPck(packet, &packet_size, data_buf, &frag_file_res); 
             printf("-Just built data pack 1 with %d bytes\n", packet_size);
-            llwrite(packet, packet_size);
+
+            if (llwrite(packet, packet_size) == -1){
+                perror("Could not send data packet\n");
+                return;
+            }
             i++;
         }
 
