@@ -14,19 +14,49 @@ void print_pck(unsigned char *packet, int packet_size){
     }
 }
 
-//used by Rx
-int createFile(FILE **fptr, const char *filename){ //hardcoded for project
-    if (filename[0] == '\0'){
+
+int file_exists(const char *filename) {
+    FILE *f = fopen(filename, "r");
+    if (f) {
+        fclose(f);
+        return 1;
+    }
+    return 0;
+}
+
+//used by Rx - confirmar se nome é repetido
+int createFile(FILE **fptr, const char *filename){ 
+    if (filename == NULL){
         perror("Empty string filename in createFile\n");
         return -1;
     } 
 
-    *fptr = fopen(filename, "a");
+    char *filename2 = malloc(strlen(filename) + 1);
+    strcpy(filename2, filename);
+
+    while (file_exists(filename2))
+    {
+        int len = strlen(filename2);
+        char *temp = malloc(len + 2); 
+        if (!temp) {
+            perror("malloc failed");
+            free(filename2);
+            return -1;
+        }
+
+        temp[0] = '1';
+        strcpy(temp + 1, filename2);
+        free(filename2);
+        filename2 = temp;
+    }
+
+    *fptr = fopen(filename2, "a");
     if (*fptr == NULL) {
+        free(filename2);
         perror("File creation failed in createFile\n");
         return -1;
     }
-
+    free(filename2);
     return 0;
 } 
 
@@ -59,7 +89,6 @@ int parsePck(unsigned char *packet, int packet_size, char **filename, int *file_
     if(packet[0] == 1){ // packet control START
         int p_index = 1; 
         while(p_index < packet_size){
-            //printf("Heloo\n");
             unsigned char T = packet[p_index++];
             unsigned char L = packet[p_index++];
             if(T == 0){
@@ -70,10 +99,7 @@ int parsePck(unsigned char *packet, int packet_size, char **filename, int *file_
             }
             else if(T == 1){
                 *filename = malloc(L);
-                printf("Hellloo\n");
-                print_pck(&packet[p_index], L);
                 memcpy(*filename, &packet[p_index], L);
-                *filename[L] = '\0';
             }
             p_index += L;
         }
@@ -239,18 +265,14 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 perror("Could not parse packet received\n");
                 return;
             } 
-            //return;
         } while (parse_res != 1);
         
-        printf("Im %s and the filename is %s\n", role, filename);
-
         FILE *fptr = NULL;
         if (createFile(&fptr, filename) == -1) return;
         unsigned char data[MAX_PAYLOAD_SIZE] = {0};
         int data_size;
         while(TRUE){
             packet_size = llread(packet); 
-            // printf("-Packet size in app layer: %d\n", packet_size);
             if(packet_size == -1) return;
             if(packet_size == 0) continue;
             parse_res = parsePck(packet, packet_size, &filename_rcv, &file_size);
@@ -260,7 +282,6 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                     perror("Failed to extract data \n");
                     return;
                 }
-                //print_pck(data, data_size);
                 printf("-Extracted data\n");
             }
             if (parse_res == 3) break;           
