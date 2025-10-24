@@ -84,8 +84,6 @@ int writeFile(FILE *fptr, unsigned char *data, int data_size){
 
 //to do reviews, need to do end packet
 int parsePck(unsigned char *packet, int packet_size, char **filename, int *file_size){
-    printf("Packet_size: %d\n", packet_size);
-    //print_pck(packet, packet_size);
     if(packet[0] == 1){ // packet control START
         int p_index = 1; 
         while(p_index < packet_size){
@@ -106,8 +104,32 @@ int parsePck(unsigned char *packet, int packet_size, char **filename, int *file_
         return 1;
 
     } else if(packet[0] == 3){
-        //fazer end
+        int p_index = 1; 
+        while(p_index < packet_size){
+            unsigned char T = packet[p_index++];
+            unsigned char L = packet[p_index++];
+            if(T == 0){
+                int end_file_size = 0;
+                for(int i = 0; i < L; i++){
+                    end_file_size = (end_file_size << 8) + packet[p_index + i];
+                }
+                if (end_file_size != *file_size){
+                    perror("Size in Start packet differs from End packet\n");
+                    return -1;
+                }
+            }
+            else if(T == 1){
+                char *end_filename = malloc(L);
+                memcpy(end_filename, &packet[p_index], L);
+                if (strcmp(end_filename, *filename) != 0){
+                    perror("Filename in Start packet differs from End packet\n");
+                    return -1;
+                }
+            }
+            p_index += L;
+        }
         return 3;
+
     } else if(packet[0] == 2) {
         return 2;
     }
@@ -287,7 +309,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             if (parse_res == 3) break;           
             if(writeFile(fptr, data, data_size) == -1) return;
         }
-        //llclose(); 
+        //confirmar se filesize correto
+        llclose(); 
 
     } else { //Tx
         printf("-Reached tx in app layer\n");
@@ -318,7 +341,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         int data_buf_size = MAX_PAYLOAD_SIZE - 4, frag_file_res ;
         unsigned char data_buf[MAX_PAYLOAD_SIZE - 4] = {0}; 
         int i = 1;
-        while (TRUE /*ha cenas no ficheiro*/){
+        while (TRUE){ // there is data in the file
             frag_file_res = readFragFile(file, data_buf, data_buf_size);
             printf("-%d Read frag file with size %d, %d\n", i, data_buf_size, frag_file_res);
             if(frag_file_res < 1) break;
