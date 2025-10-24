@@ -94,6 +94,8 @@ int parsePck(unsigned char *packet, int packet_size, char **filename, int *file_
                 for(int i = 0; i < L; i++){
                     *file_size = (*file_size << 8) + packet[p_index + i];
                 }
+                printf("Start parse%d\n", *file_size);
+
             }
             else if(T == 1){
                 *filename = malloc(L);
@@ -113,6 +115,8 @@ int parsePck(unsigned char *packet, int packet_size, char **filename, int *file_
                 for(int i = 0; i < L; i++){
                     end_file_size = (end_file_size << 8) + packet[p_index + i];
                 }
+                printf("end parse%d\n", end_file_size);
+
                 if (end_file_size != *file_size){
                     perror("Size in Start packet differs from End packet\n");
                     return -1;
@@ -172,6 +176,7 @@ int readFragFile(FILE *fptr, unsigned char *data, int data_size){
 
 //add little endian
 void buildCtrlPck(unsigned char *packet, int *packet_size, unsigned char control_field, const char *filename, int file_total_size){
+    printf("build control parse%d\n", file_total_size);
     
     // Get string of file_total_size
     static char size_str[32];
@@ -288,11 +293,12 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 return;
             } 
         } while (parse_res != 1);
-        
+
         FILE *fptr = NULL;
         if (createFile(&fptr, filename) == -1) return;
         unsigned char data[MAX_PAYLOAD_SIZE] = {0};
         int data_size;
+        int data_acc = 0;
         while(TRUE){
             packet_size = llread(packet); 
             if(packet_size == -1) return;
@@ -304,13 +310,21 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                     perror("Failed to extract data \n");
                     return;
                 }
-                printf("-Extracted data\n");
+                data_acc += data_size;
             }
             if (parse_res == 3) break;           
             if(writeFile(fptr, data, data_size) == -1) return;
         }
+        // if (data_acc != file_size){
+        //     printf("%d %d\n", data_acc, file_size);
+        //     perror("Total size of the data received is different from expected data");
+        //     return;
+        // }
+
         //confirmar se filesize correto
-        llclose(); 
+        if (llclose() == -1){
+            perror("Error on disconnecting in llclose\n");
+        }
 
     } else { //Tx
         printf("-Reached tx in app layer\n");
@@ -346,7 +360,6 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             printf("-%d Read frag file with size %d, %d\n", i, data_buf_size, frag_file_res);
             if(frag_file_res < 1) break;
             buildDataPck(packet, &packet_size, data_buf, &frag_file_res); 
-            printf("-Just built data pack 1 with %d bytes\n", packet_size);
 
             if (llwrite(packet, packet_size) == -1){
                 perror("Could not send data packet\n");
@@ -358,7 +371,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         buildCtrlPck(packet, &packet_size, 3, filename, file_total_size);
         llwrite(packet, packet_size);
 
-        llclose();
+        if (llclose() == -1){
+            perror("Error on disconnecting in llclose\n");
+        }
     }
 
 }

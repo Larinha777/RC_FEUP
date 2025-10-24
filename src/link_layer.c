@@ -36,7 +36,7 @@ int receive_packet(unsigned char *buf, setMessageState *state){
         } else if (packet.cur_state == RR0_S || packet.cur_state == RR1_S){
             memcpy(buf, packet.data, packet.data_size);
             *state = packet.cur_state;
-            printf("Current State: %d, data_size:%d \n", packet.cur_state, packet.data_size);
+            // printf("Current State: %d, data_size:%d \n", packet.cur_state, packet.data_size);
             return packet.data_size;
         } 
     }
@@ -234,9 +234,7 @@ int llwrite(const unsigned char *data_buf, int data_bufSize)
     }
 
     setMessageState ret_state = START;
-    
-    printf("Will start to send the packet I%d\n", inf_frame_num);
-    
+        
     if (send_packet(packet_buf, pck_p, &ret_state) == -1){
         perror("Error receiving packets in llwrite\n");
         return -1;
@@ -373,16 +371,45 @@ int llclose()
     buf[2] = DISC;
     buf[3] = buf[1] ^ buf[2];
     buf[4] = FLAG;
-    
     setMessageState ret_state;
-    if (send_packet(buf, 5, &ret_state) != 0){
-        perror("Failed to send packet in llclose\n");
-        return -1;
-    }
-    buf[2] = CONTROL_UA;
-    buf[3] = buf[1] ^ buf[2];
-    writeBytesSerialPort(buf, 5); // check -1
     
+
+    if (connectParam.role == LlRx){
+        ret_state = START;
+        while(ret_state != DISC_RCV){
+            receive_packet(buf, &ret_state);
+        }
+        int written_bytes = writeBytesSerialPort(buf, 5);
+        if (written_bytes == -1){
+            perror("No bytes written\n");
+            return -1;        
+        } else if (written_bytes < 5) {
+            perror("Could not write all bytes\n");
+            return -1;        
+        }
+        
+        sleep(1);
+        receive_packet(buf, &ret_state);
+
+    } else {
+        if (send_packet(buf, 5, &ret_state) == -1 || ret_state !=DISC_RCV){
+            perror("Failed to send packet in llclose\n");
+            return -1;
+        }
+
+        buf[2] = CONTROL_UA;
+        buf[3] = buf[1] ^ buf[2];
+
+        int written_bytes = writeBytesSerialPort(buf, 5);
+        if (written_bytes == -1){
+            perror("No bytes written\n");
+            return -1;        
+        } else if (written_bytes < 5) {
+            perror("Could not write all bytes\n");
+            return -1;        
+        }
+    }
+
     if (closeSerialPort() < 0)
     {
         perror("closeSerialPort");
