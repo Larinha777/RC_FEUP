@@ -33,8 +33,8 @@ int updateCurrentState(Packet *packet, unsigned char byte){
                 packet->cur_state = FLAG_RCV;
                 return 0;
             }
-            if (byte == CONTROL_SET || byte == CONTROL_UA || byte == DISC ||
-                byte == RR0 || byte == RR1 || byte == REJ0 || byte == REJ1 || byte == I0 || byte == I1){
+            if (byte == CONTROL_SET || byte == CONTROL_UA || byte == CONTROL_DISC ||
+                byte == CONTROL_RR0 || byte == CONTROL_RR1 || byte == CONTROL_REJ0 || byte == CONTROL_REJ1 || byte == CONTROL_I0 || byte == CONTROL_I1){
                 packet->cur_state = C_RCV;
                 packet->control = byte;
                 return 0;
@@ -62,19 +62,19 @@ int updateCurrentState(Packet *packet, unsigned char byte){
                     case CONTROL_UA:
                     packet->cur_state = UA_RCV;
                     return 0;
-                    case DISC:
+                    case CONTROL_DISC:
                     packet->cur_state = DISC_RCV;
                     return 0;
-                    case RR0:
+                    case CONTROL_RR0:
                     packet->cur_state = RR0_S;
                     return 0;
-                    case RR1:
+                    case CONTROL_RR1:
                     packet->cur_state = RR1_S;
                     return 0;
-                    case REJ0:
+                    case CONTROL_REJ0:
                     packet->cur_state = REJ0_S;
                     return 0;
-                    case REJ1:
+                    case CONTROL_REJ1:
                     packet->cur_state = REJ1_S;
                     return 0;
                 
@@ -82,7 +82,7 @@ int updateCurrentState(Packet *packet, unsigned char byte){
                     break;
                 }
             }
-            if (packet->control == I0 || packet->control == I1){
+            if (packet->control == CONTROL_I0 || packet->control == CONTROL_I1){
                 
                 data_bcc = 0;
                 last_data_byte = byte;
@@ -98,16 +98,16 @@ int updateCurrentState(Packet *packet, unsigned char byte){
             if (byte == FLAG){
                 if (data_bcc == last_data_byte){
                     packet->data_size = data_counter;
-                    if (packet->control == I0){
+                    if (packet->control == CONTROL_I0){
                         packet->cur_state = RR1_S;
-                    } else if (packet->control == I1){
+                    } else if (packet->control == CONTROL_I1){
                         packet->cur_state = RR0_S;
                     }
                     return 0;
                 } else {
-                    if (packet->control == I0){
+                    if (packet->control == CONTROL_I0){
                         packet->cur_state = REJ0_S;
-                    } else if (packet->control == I1){
+                    } else if (packet->control == CONTROL_I1){
                         packet->cur_state = REJ1_S;
                     } 
                     return 0;
@@ -130,11 +130,11 @@ int updateCurrentState(Packet *packet, unsigned char byte){
             
             // more data than expected
             // should never happen DUVIDAAAA!!!!!!!!!
-            if (data_counter > MAX_DATA_SIZE){ 
+            if (data_counter > MAX_LL_DATA_SIZE){ 
                 printf("Received more data than expected\n");
-                if (packet->control == I0){
+                if (packet->control == CONTROL_I0){
                     packet->cur_state = REJ0_S;
-                } else if (packet->control == I1){
+                } else if (packet->control == CONTROL_I1){
                     packet->cur_state = REJ1_S;
                 }                 
                 return 0;
@@ -148,7 +148,7 @@ int updateCurrentState(Packet *packet, unsigned char byte){
     }
     
 
-    memset(packet->data, 0, MAX_DATA_SIZE);
+    memset(packet->data, 0, MAX_APPL_DATA_SIZE);
     packet->cur_state = START;
     return 0;
 }

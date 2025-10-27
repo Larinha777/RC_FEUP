@@ -1,8 +1,9 @@
 // Link layer header.
-// DO NOT CHANGE THIS FILE
 
 #ifndef _LINK_LAYER_H_
 #define _LINK_LAYER_H_
+
+#include "macros.h"
 
 typedef enum
 {
@@ -17,15 +18,15 @@ typedef struct
     int baudRate;
     int nRetransmissions;
     int timeout;
+
+    //Statistics
+    unsigned int numSentRR;
+	unsigned int numReceivedRR;
+	unsigned int numSentREJ;
+	unsigned int numReceivedREJ;
+
 } LinkLayer;
 
-// Size of maximum acceptable payload.
-// Maximum number of bytes that application layer should send to link layer.
-#define MAX_PAYLOAD_SIZE 1000 // duplicado em flag_receiver.h
-
-// MISC
-#define FALSE 0
-#define TRUE 1
 
 // Open a connection using the "port" parameters defined in struct linkLayer.
 // Return 0 on success or -1 on error.

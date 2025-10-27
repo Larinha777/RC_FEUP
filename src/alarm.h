@@ -5,9 +5,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include "macros.h"
 
-#define FALSE 0
-#define TRUE 1
 
 int alarmEnabled = FALSE;
 int alarmCount = 0;

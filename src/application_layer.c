@@ -290,7 +290,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     if (connectionParameters.role == LlRx){ //Rx
         printf("-Reached rx in app layer\n");////
         
-        unsigned char packet[MAX_PAYLOAD_SIZE];
+        unsigned char packet[MAX_APPL_PACKET_SIZE];
         char *filename_rcv;
         int file_size = 0;
 
@@ -309,7 +309,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
         FILE *fptr = NULL;
         if (createFile(&fptr, filename) == -1) return;
-        unsigned char data[MAX_PAYLOAD_SIZE] = {0};
+        unsigned char data[MAX_APPL_DATA_SIZE] = {0};
         int data_size;
         int data_acc = 0;
         while(TRUE){
@@ -345,7 +345,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         if (openFile(filename, &file) == -1) return;
 
         // Create start packet
-        unsigned char packet[MAX_PAYLOAD_SIZE] = {0} ;
+        unsigned char packet[MAX_APPL_PACKET_SIZE] = {0} ;
         int packet_size;
         
         // Get file size
@@ -364,8 +364,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             return;
         }
 
-        int data_buf_size = MAX_PAYLOAD_SIZE - 3, frag_file_res ;
-        unsigned char data_buf[MAX_PAYLOAD_SIZE - 3] = {0}; 
+        int data_buf_size = MAX_APPL_DATA_SIZE, frag_file_res ;
+        unsigned char data_buf[MAX_APPL_DATA_SIZE] = {0}; 
         int i = 1;
         while (TRUE){ // there is data in the file
             frag_file_res = readFragFile(file, data_buf, data_buf_size);

@@ -4,8 +4,6 @@
 #include "serial_port.h"
 #include "flag_receiver.h"
 #include "alarm.h"
-// MISC
-#define _POSIX_SOURCE 1 // POSIX compliant source
 
 LinkLayer connectParam;
 int inf_frame_num = 0;
@@ -41,8 +39,7 @@ int receive_packet(unsigned char *buf, setMessageState *state){
     return 0;
 }
 
-// maybe rename this
-int send_packet(const unsigned char *send_buf, int bufSize, setMessageState *ret_state){ 
+int send_packet_with_retries(const unsigned char *send_buf, int bufSize, setMessageState *ret_state){ 
     if (send_buf == NULL){
         perror("Message to send was NULL\n");
         return -1;
@@ -132,23 +129,16 @@ int llopen(LinkLayer connectionParameters)
     
     if (connectionParameters.role == LlTx) { //Transmiter  
 
-        unsigned char buf[MAX_DATA_SIZE] = {0}; 
-        buf[0] = FLAG;
-        buf[1] = ADDRESS_BY_SENDER;
-        buf[2] = CONTROL_SET;
-        buf[3] = buf[1] ^ buf[2];
-        buf[4] = FLAG;
-        
         setMessageState ret_state;
-        if (send_packet(buf, 5, &ret_state) == -1){
+        if (send_packet_with_retries(SET_PCK, 5, &ret_state) == -1){
             printf("Failed to send packet in llopen of the transmiter\n");
             return -1;
         }
         printf("Send set and received ua\n");////
 
 
-    } else { //Receiver
-        unsigned char buf[MAX_DATA_SIZE] = {0}; 
+    } else if (connectionParameters.role == LlRx) { //Receiver
+        unsigned char buf[MAX_LL_DATA_SIZE] = {0}; 
         
         if (receive_packet(buf, &state) != 0 || state != SET_RCV){
             perror("Failed to receive packet in llopen of the receiver\n");
@@ -156,14 +146,7 @@ int llopen(LinkLayer connectionParameters)
         } 
         printf("Received Set\n");////
 
-
-        buf[0] = FLAG;
-        buf[1] = ADDRESS_BY_SENDER;
-        buf[2] = CONTROL_UA;
-        buf[3] = buf[1] ^ buf[2];
-        buf[4] = FLAG;
-
-        int written_bytes = writeBytesSerialPort(buf, 5);
+        int written_bytes = writeBytesSerialPort(UA_PCK0, 5);
         if (written_bytes == -1){
             perror("No bytes written\n");
             return -1;        
@@ -192,15 +175,15 @@ int llwrite(const unsigned char *data_buf, int data_bufSize)
         return -1;      
     }
 
-    unsigned char packet_buf[MAX_PACKET_SIZE] = {0};
+    unsigned char packet_buf[MAX_LL_PACKET_SIZE] = {0};
 
     packet_buf[0] = FLAG;
     packet_buf[1] = ADDRESS_BY_SENDER;
     
     if (inf_frame_num == 0){
-        packet_buf[2] = I0;
+        packet_buf[2] = CONTROL_I0;
     } else {
-        packet_buf[2] = I1;
+        packet_buf[2] = CONTROL_I1;
     }
 
     packet_buf[3] = packet_buf[1] ^ packet_buf[2];
@@ -232,7 +215,7 @@ int llwrite(const unsigned char *data_buf, int data_bufSize)
 
     setMessageState ret_state = START;
         
-    if (send_packet(packet_buf, pck_p, &ret_state) == -1){
+    if (send_packet_with_retries(packet_buf, pck_p, &ret_state) == -1){
         perror("Error receiving packets in llwrite\n");
         return -1;
     }
@@ -249,13 +232,14 @@ int llwrite(const unsigned char *data_buf, int data_bufSize)
 int llread(unsigned char *packet) //
 {
     setMessageState state;
-    unsigned char buf[MAX_DATA_SIZE] = {0};
+    unsigned char buf[MAX_LL_DATA_SIZE] = {0};
     int buf_size = receive_packet(buf, &state);
     printf("Size of packet in llread %d\n", buf_size);////
     if ( buf_size == -1){
         perror("Failed to receive data in llread\n");
         return -1;
     } 
+    
     unsigned char send_msg[5] = {0};
     send_msg[0]=FLAG;
     send_msg[1]=ADDRESS_BY_SENDER;
@@ -273,23 +257,25 @@ int llread(unsigned char *packet) //
         // correct packet was sent
         // wanted 1 received 1
 
-        send_msg[2]=RR0;
-        send_msg[3]=ADDRESS_BY_SENDER ^ RR0;
+        send_msg[2]=CONTROL_RR0;
+        send_msg[3]=ADDRESS_BY_SENDER ^ CONTROL_RR0;
         if (inf_frame_num == 1)
         { 
             memcpy(packet, buf, buf_size);
             bytes_returned = buf_size;
+            inf_frame_num ^= 1;
         }
         break;
 
     case RR1_S:
-        send_msg[2]=RR1;
-        send_msg[3]=ADDRESS_BY_SENDER ^ RR1;
+        send_msg[2]=CONTROL_RR1;
+        send_msg[3]=ADDRESS_BY_SENDER ^ CONTROL_RR1;
         // correct packet was sent 
         // wanted 0 received 0
         if (inf_frame_num == 0){
             memcpy(packet, buf, buf_size);
             bytes_returned = buf_size;
+            inf_frame_num ^= 1;
         }
 
         // if inf_fram_num == 1 
@@ -303,8 +289,8 @@ int llread(unsigned char *packet) //
         // faulty packet was sent 
         // wanted 0 received incorrect 0
         if (inf_frame_num == 0){
-            send_msg[2]=REJ0;
-            send_msg[3]=ADDRESS_BY_SENDER ^ REJ0;
+            send_msg[2] = CONTROL_REJ0;
+            send_msg[3] = ADDRESS_BY_SENDER ^ CONTROL_REJ0;
         } 
 
         // if inf_fram_num == 1 
@@ -312,8 +298,8 @@ int llread(unsigned char *packet) //
         // wanted 1 received 0 (already has correct 0)
         else 
         {
-            send_msg[2]=RR1;
-            send_msg[3]=ADDRESS_BY_SENDER ^ RR1;
+            send_msg[2] = CONTROL_RR1;
+            send_msg[3] = ADDRESS_BY_SENDER ^ CONTROL_RR1;
         }
         break;    
 
@@ -322,8 +308,8 @@ int llread(unsigned char *packet) //
         // faulty packet sent was a duplicate 
         // wanted 0 received 1 (already has correct 1)
         if (inf_frame_num == 0){
-            send_msg[2]=RR0;
-            send_msg[3]=ADDRESS_BY_SENDER ^ RR0;            
+            send_msg[2] = CONTROL_RR0;
+            send_msg[3] = ADDRESS_BY_SENDER ^ CONTROL_RR0;            
         } 
 
         // if inf_fram_num == 1
@@ -331,8 +317,8 @@ int llread(unsigned char *packet) //
         // wanted 1 received faulty 1
         else 
         {
-            send_msg[2]=REJ1;
-            send_msg[3]=ADDRESS_BY_SENDER ^ REJ1;
+            send_msg[2] = CONTROL_REJ1;
+            send_msg[3] = ADDRESS_BY_SENDER ^ CONTROL_REJ1;
         }
 
         break;    
@@ -351,7 +337,6 @@ int llread(unsigned char *packet) //
         return -1;        
     }
 
-    inf_frame_num ^= 1;
     return bytes_returned;
 }
 
@@ -360,21 +345,15 @@ int llread(unsigned char *packet) //
 ////////////////////////////////////////////////
 int llclose()
 { // to do
-    unsigned char buf[MAX_DATA_SIZE] = {0};
-    buf[0] = FLAG;
-    buf[2] = DISC;
-    buf[4] = FLAG;
-    setMessageState ret_state;
+    unsigned char buf[5] = {0};
+    setMessageState ret_state = START;
     
     
     if (connectParam.role == LlRx){
-        buf[1] = ADDRESS_BY_RECEIVER;
-        buf[3] = buf[1] ^ buf[2];
-        ret_state = START;
         while(ret_state != DISC_RCV){
             receive_packet(buf, &ret_state);
         }
-        int written_bytes = writeBytesSerialPort(buf, 5);
+        int written_bytes = writeBytesSerialPort(DISC_PCK1, 5);
         if (written_bytes == -1){
             perror("No bytes written\n");
             return -1;        
@@ -387,17 +366,12 @@ int llclose()
         receive_packet(buf, &ret_state);
 
     } else {
-        buf[1] = ADDRESS_BY_SENDER;
-        buf[3] = buf[1] ^ buf[2];
-        if (send_packet(buf, 5, &ret_state) == -1 || ret_state !=DISC_RCV){
+        if (send_packet_with_retries(DISC_PCK0, 5, &ret_state) == -1 || ret_state !=DISC_RCV){
             perror("Failed to send packet in llclose\n");
             return -1;
         }
 
-        buf[2] = CONTROL_UA;
-        buf[3] = buf[1] ^ buf[2];
-
-        int written_bytes = writeBytesSerialPort(buf, 5);
+        int written_bytes = writeBytesSerialPort(UA_PCK1, 5);
         if (written_bytes == -1){
             perror("No bytes written\n");
             return -1;        
