@@ -1,5 +1,5 @@
-#ifndef _FLAG_RECEIVER_H_
-#define _FLAG_RECEIVER_H_
+#ifndef _STATE_MACHINE_H_
+#define _STATE_MACHINE_H_
 
 #include <string.h>
 #include <stdio.h>

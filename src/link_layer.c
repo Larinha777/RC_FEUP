@@ -2,7 +2,7 @@
 
 #include "link_layer.h"
 #include "serial_port.h"
-#include "flag_receiver.h"
+#include "state_machine.h"
 #include "alarm.h"
 
 LinkLayer connectParam;
