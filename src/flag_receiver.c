@@ -21,7 +21,7 @@ int updateCurrentState(Packet *packet, unsigned char byte){
                 packet->cur_state = FLAG_RCV;
                 return 0;
             }
-            if (byte == ADDRESS_BY_SENDER){
+            if (byte == ADDRESS_BY_SENDER || byte == ADDRESS_BY_RECEIVER){
                 packet->cur_state = A_RCV;
                 packet->address = byte;
                 return 0;

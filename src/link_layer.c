@@ -22,12 +22,10 @@ int receive_packet(unsigned char *buf, setMessageState *state){
         if (bytes == -1){
             break;
         }
-        //printf("bytes = 0x%02X\n", byte_rcv);
         if (updateCurrentState(&packet, byte_rcv) == -1){
             perror("Error updating state\n");
             return -1;
         }
-        // printf("Received byte: 0x%02X state:%d\n", byte_rcv, packet.cur_state);
 
         if (packet.cur_state == SET_RCV || packet.cur_state == UA_RCV || packet.cur_state == DISC_RCV
             || packet.cur_state == REJ0_S || packet.cur_state == REJ1_S )
@@ -36,7 +34,6 @@ int receive_packet(unsigned char *buf, setMessageState *state){
         } else if (packet.cur_state == RR0_S || packet.cur_state == RR1_S){
             memcpy(buf, packet.data, packet.data_size);
             *state = packet.cur_state;
-            // printf("Current State: %d, data_size:%d \n", packet.cur_state, packet.data_size);
             return packet.data_size;
         } 
     }
@@ -103,7 +100,7 @@ int send_packet(const unsigned char *send_buf, int bufSize, setMessageState *ret
             }
 
             if ((cur_state == REJ0_S && inf_frame_num == 0) || (cur_state == REJ1_S && inf_frame_num == 1)){
-                printf("Received REJ\n");
+                printf("Received REJ\n"); ////
                 alarm(0); 
                 alarmEnabled = 0;
                 break;
@@ -113,7 +110,7 @@ int send_packet(const unsigned char *send_buf, int bufSize, setMessageState *ret
     }
     
 
-    perror("Failed to send packet\n");
+    printf("Failed to send packet\n");
     return -1;
 }
 
@@ -144,10 +141,10 @@ int llopen(LinkLayer connectionParameters)
         
         setMessageState ret_state;
         if (send_packet(buf, 5, &ret_state) == -1){
-            perror("Failed to receive packet in llopen of the transmiter\n");
+            printf("Failed to send packet in llopen of the transmiter\n");
             return -1;
         }
-        printf("Send set and received ua\n");
+        printf("Send set and received ua\n");////
 
 
     } else { //Receiver
@@ -157,7 +154,7 @@ int llopen(LinkLayer connectionParameters)
             perror("Failed to receive packet in llopen of the receiver\n");
             return -1;
         } 
-        printf("Received Set\n");
+        printf("Received Set\n");////
 
 
         buf[0] = FLAG;
@@ -174,7 +171,7 @@ int llopen(LinkLayer connectionParameters)
             perror("Could not write all bytes\n");
             return -1;        
         } 
-        printf("Sent ua\n");
+        printf("Sent ua\n");////
 
     }
 
@@ -240,7 +237,7 @@ int llwrite(const unsigned char *data_buf, int data_bufSize)
         return -1;
     }
 
-    printf("Successfully sent Packet I%d\n", inf_frame_num);
+    printf("Successfully sent Packet I%d\n", inf_frame_num);////
     inf_frame_num ^= 1;
     return data_p;
     
@@ -254,12 +251,11 @@ int llread(unsigned char *packet) //
     setMessageState state;
     unsigned char buf[MAX_DATA_SIZE] = {0};
     int buf_size = receive_packet(buf, &state);
-    printf("Size of packet in llread %d\n", buf_size);
+    printf("Size of packet in llread %d\n", buf_size);////
     if ( buf_size == -1){
         perror("Failed to receive data in llread\n");
         return -1;
     } 
-    // printf("llread received %d bytes of data and reached %d state, with inf n %d\n", buf_size, state, inf_frame_num);
     unsigned char send_msg[5] = {0};
     send_msg[0]=FLAG;
     send_msg[1]=ADDRESS_BY_SENDER;
@@ -347,7 +343,6 @@ int llread(unsigned char *packet) //
     }
     
     int written_bytes = writeBytesSerialPort(send_msg, 5);
-    //printf("llread will return %d bytes and sent the ok msg\n", bytes_returned);
     if (written_bytes == -1){
         perror("No bytes written\n");
         return -1;        

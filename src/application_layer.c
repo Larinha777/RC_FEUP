@@ -278,17 +278,17 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     // open connection 
     // done by both Tx and Rx
     if (llopen(connectionParameters) == -1){
-        perror("Could not open connection\n");
+        printf("Could not open connection\n");
         return;
     }
     
-    printf("-llopen complete\n");
+    printf("-llopen complete\n");////
 
     // testConnection(connectionParameters);
     // return;
 
     if (connectionParameters.role == LlRx){ //Rx
-        printf("-Reached rx in app layer\n");
+        printf("-Reached rx in app layer\n");////
         
         unsigned char packet[MAX_PAYLOAD_SIZE];
         char *filename_rcv;
@@ -300,7 +300,6 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             packet_size = llread(packet); // gets start packet
             if(packet_size == -1) return;
             else if (packet_size == 0) continue;
-            printf("-Read 1 packet(prob start)\n");
             parse_res = parsePck(packet, packet_size, &filename_rcv, &file_size);
             if(parse_res == -1){
                 perror("Could not parse packet received\n");
@@ -329,13 +328,12 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             if (parse_res == 3) break;           
             if(writeFile(fptr, data, data_size) == -1) return;
         }
-        // if (data_acc != file_size){
-        //     printf("%d %d\n", data_acc, file_size);
-        //     perror("Total size of the data received is different from expected data");
-        //     return;
-        // }
+        if (data_acc != file_size){
+            printf("%d %d\n", data_acc, file_size);
+            perror("Total size of the data received is different from expected data");
+            return;
+        }
 
-        //confirmar se filesize correto
         if (llclose() == -1){
             perror("Error on disconnecting in llclose\n");
         }
@@ -366,8 +364,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             return;
         }
 
-        int data_buf_size = MAX_PAYLOAD_SIZE - 4, frag_file_res ;
-        unsigned char data_buf[MAX_PAYLOAD_SIZE - 4] = {0}; 
+        int data_buf_size = MAX_PAYLOAD_SIZE - 3, frag_file_res ;
+        unsigned char data_buf[MAX_PAYLOAD_SIZE - 3] = {0}; 
         int i = 1;
         while (TRUE){ // there is data in the file
             frag_file_res = readFragFile(file, data_buf, data_buf_size);
@@ -381,7 +379,6 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             }
             i++;
         }
-
         buildCtrlPck(packet, &packet_size, 3, filename, file_total_size);
         llwrite(packet, packet_size);
 
