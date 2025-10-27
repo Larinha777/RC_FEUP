@@ -367,14 +367,14 @@ int llclose()
 { // to do
     unsigned char buf[MAX_DATA_SIZE] = {0};
     buf[0] = FLAG;
-    buf[1] = ADDRESS_BY_SENDER;
     buf[2] = DISC;
-    buf[3] = buf[1] ^ buf[2];
     buf[4] = FLAG;
     setMessageState ret_state;
     
-
+    
     if (connectParam.role == LlRx){
+        buf[1] = ADDRESS_BY_RECEIVER;
+        buf[3] = buf[1] ^ buf[2];
         ret_state = START;
         while(ret_state != DISC_RCV){
             receive_packet(buf, &ret_state);
@@ -392,6 +392,8 @@ int llclose()
         receive_packet(buf, &ret_state);
 
     } else {
+        buf[1] = ADDRESS_BY_SENDER;
+        buf[3] = buf[1] ^ buf[2];
         if (send_packet(buf, 5, &ret_state) == -1 || ret_state !=DISC_RCV){
             perror("Failed to send packet in llclose\n");
             return -1;
@@ -415,8 +417,6 @@ int llclose()
         perror("closeSerialPort");
         return -1;
     }
-
-    // TODO: Implement this function
 
     return 0;
 }
