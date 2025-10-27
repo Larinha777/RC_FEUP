@@ -14,6 +14,33 @@ void print_pck(unsigned char *packet, int packet_size){
     }
 }
 
+int big_endian_to_int(unsigned char *out, int len) {
+    int value = 0;
+    for (int i = 0; i < len; i++) {
+        value = (value << 8) | out[i];
+    }
+    return value;
+}
+
+int int_to_big_endian(int value, unsigned char *out) {
+    int size = 0;
+
+    if (value == 0) {
+        out[0] = 0;
+        return 1;
+    }
+
+    int temp = value;
+    while (temp > 0) {
+        temp >>= 8;
+        size++;
+    }
+
+    for (int i = 0; i < size; i++) {
+        out[size - 1 - i] = (value >> (i * 8)) & 0xFF;
+    }
+    return size;
+}
 
 int file_exists(const char *filename) {
     FILE *f = fopen(filename, "r");
@@ -90,12 +117,8 @@ int parsePck(unsigned char *packet, int packet_size, char **filename, int *file_
             unsigned char T = packet[p_index++];
             unsigned char L = packet[p_index++];
             if(T == 0){
-                *file_size = 0;
-                for(int i = 0; i < L; i++){
-                    *file_size = (*file_size << 8) + packet[p_index + i];
-                }
-                printf("Start parse%d\n", *file_size);
-
+                *file_size = big_endian_to_int(packet+p_index, L);
+                printf("Start parse of file with size %d\n", *file_size);
             }
             else if(T == 1){
                 *filename = malloc(L);
@@ -111,11 +134,7 @@ int parsePck(unsigned char *packet, int packet_size, char **filename, int *file_
             unsigned char T = packet[p_index++];
             unsigned char L = packet[p_index++];
             if(T == 0){
-                int end_file_size = 0;
-                for(int i = 0; i < L; i++){
-                    end_file_size = (end_file_size << 8) + packet[p_index + i];
-                }
-                printf("end parse%d\n", end_file_size);
+                int end_file_size = big_endian_to_int(packet + p_index, L);
 
                 if (end_file_size != *file_size){
                     perror("Size in Start packet differs from End packet\n");
@@ -174,16 +193,11 @@ int readFragFile(FILE *fptr, unsigned char *data, int data_size){
     return size_read;
 } 
 
-//add little endian
-void buildCtrlPck(unsigned char *packet, int *packet_size, unsigned char control_field, const char *filename, int file_total_size){
-    printf("build control parse%d\n", file_total_size);
-    
-    // Get string of file_total_size
-    static char size_str[32];
-    snprintf(size_str, sizeof(size_str), "%d", file_total_size);
+void buildCtrlPck(unsigned char *packet, int *packet_size, unsigned char control_field, const char *filename, int file_total_size){   
+    unsigned char size_str[8];
     
     int len_filename = strlen(filename);
-    int len_file_total_size =  sizeof(size_str);
+    int len_file_total_size = int_to_big_endian(file_total_size, size_str);
 
     // Get packet size            
     *packet_size = 1 + 2 + len_filename + 2 + len_file_total_size;

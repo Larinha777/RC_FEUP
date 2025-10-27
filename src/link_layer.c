@@ -68,7 +68,7 @@ int send_packet(const unsigned char *send_buf, int bufSize, setMessageState *ret
     }
     
     alarmCount = 0;
-    for (int tries = 0; tries <= connectParam.nRetransmissions; tries++){
+    for (int tries = 0; tries < connectParam.nRetransmissions; tries++){
 
         int written_bytes = writeBytesSerialPort(send_buf, bufSize);
         if (written_bytes == -1){
