@@ -320,7 +320,10 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 }
                 data_acc += data_size;
             }
-            if (parse_res == 3) break;           
+            if (parse_res == 3) {
+                closeFile(fptr);
+                break;  
+            }         
             if(writeFile(fptr, data, data_size) == -1) return;
         }
         if (data_acc != file_size){
