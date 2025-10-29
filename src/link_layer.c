@@ -16,12 +16,12 @@ int receive_packet(unsigned char *buf, setMessageState *state){
     unsigned char byte_rcv;
     while (TRUE)
     {
-        bytes = readByteSerialPort(&byte_rcv); 
+        bytes = readByteSerialPort(&byte_rcv);
         if (bytes <= 0){
             break;
         }
         if (updateCurrentState(&packet, byte_rcv) == -1){
-            perror("Error updating state\n");
+            printf("Error updating state\n");
             return -1;
         }
 
@@ -41,11 +41,11 @@ int receive_packet(unsigned char *buf, setMessageState *state){
 
 int send_packet_with_retries(const unsigned char *send_buf, int bufSize, setMessageState *ret_state){ 
     if (send_buf == NULL){
-        perror("Message to send was NULL\n");
+        printf("Message to send was NULL\n");
         return -1;
     }
     if (bufSize < 1){
-        perror("Size of the buffer is impossible\n");
+        printf("Size of the buffer is incorrect\n");
         return -1;  
     }
     
@@ -55,7 +55,7 @@ int send_packet_with_retries(const unsigned char *send_buf, int bufSize, setMess
         act.sa_handler = alarmHandler;
         if (sigaction(SIGALRM, &act, NULL) == -1)
         {
-            perror("sigaction");
+            printf("sigaction");
             return -1;
         }
         handler = 1;
@@ -63,18 +63,19 @@ int send_packet_with_retries(const unsigned char *send_buf, int bufSize, setMess
     
     alarmCount = 0;
     for (int tries = 0; tries < connectParam.nRetransmissions; tries++){
+        printf("Try nº: %d\n", tries+1);
+
         int written_bytes = writeBytesSerialPort(send_buf, bufSize);
         if (send_buf[2] == CONTROL_I0 || send_buf[2] == CONTROL_I1) connectParam.totalSentIFrames++;
         if (written_bytes == -1){
             alarm(0); 
             alarmEnabled = 0;
-            sleep(10);
-            printf("New try\n");
+            sleep(1);
             continue;     
         } else if (written_bytes < bufSize) {
             alarm(0); 
             alarmEnabled = 0;
-            perror("Could not write all bytes\n");
+            printf("Could not write all bytes\n");
             break;      
         } 
 
@@ -82,7 +83,6 @@ int send_packet_with_retries(const unsigned char *send_buf, int bufSize, setMess
         alarm(connectParam.timeout);
 
         while (alarmEnabled){
-
             unsigned char receive_buf;
             setMessageState cur_state;
             int bytes_read = receive_packet(&receive_buf, &cur_state);
@@ -110,10 +110,8 @@ int send_packet_with_retries(const unsigned char *send_buf, int bufSize, setMess
                 alarmEnabled = 0;
                 break;
             }
-
         }
     }
-    
 
     printf("Failed to send packet\n");
     return -1;
@@ -127,45 +125,41 @@ int llopen(LinkLayer connectionParameters)
 {
     if (openSerialPort(connectionParameters.serialPort, connectionParameters.baudRate) < 0)
     {
-        perror("openSerialPort");
+        printf("openSerialPort");
         return -1;
     }
 
     connectParam = connectionParameters;
-
-    setMessageState state;
     
     if (connectionParameters.role == LlTx) { //Transmiter  
-
+        
         setMessageState ret_state;
         if (send_packet_with_retries(SET_PCK, 5, &ret_state) == -1){
             printf("Failed to send packet in llopen of the transmiter\n");
             return -1;
         }
         printf("Send set and received ua\n");////
-
-
+        
     } else if (connectionParameters.role == LlRx) { //Receiver
+        setMessageState state;
         unsigned char buf[MAX_LL_DATA_SIZE] = {0}; 
         
         if (receive_packet(buf, &state) != 0 || state != SET_RCV){
-            perror("Failed to receive packet in llopen of the receiver\n");
+            printf("Failed to receive packet in llopen of the receiver\n");
             return -1;
         } 
         printf("Received Set\n");////
 
         int written_bytes = writeBytesSerialPort(UA_PCK0, 5);
         if (written_bytes == -1){
-            perror("No bytes written\n");
+            printf("No bytes written\n");
             return -1;        
         } else if (written_bytes < 5) {
-            perror("Could not write all bytes\n");
+            printf("Could not write all bytes\n");
             return -1;        
         } 
         printf("Sent ua\n");////
-
     }
-
     return 0;
 }
 
@@ -175,11 +169,11 @@ int llopen(LinkLayer connectionParameters)
 int llwrite(const unsigned char *data_buf, int data_bufSize)
 { 
     if (data_buf == NULL){
-        perror("Poiter to the date is NULL in llwrite\n");
+        printf("Poiter to the date is NULL in llwrite\n");
         return -1;
     }
     if (data_bufSize < 1){
-        perror("Size of buffer not positive in llwrite\n");
+        printf("Size of buffer not positive in llwrite\n");
         return -1;      
     }
 
@@ -225,7 +219,7 @@ int llwrite(const unsigned char *data_buf, int data_bufSize)
     
     connectParam.dupSentIFrames++;
     if (send_packet_with_retries(packet_buf, pck_p, &ret_state) == -1){
-        perror("Error receiving packets in llwrite\n");
+        printf("Error receiving packets in llwrite\n");
         return -1;
     }
 
@@ -245,7 +239,7 @@ int llread(unsigned char *packet) //
     int buf_size = receive_packet(buf, &state);
     printf("Size of packet in llread %d\n", buf_size);////
     if ( buf_size == -1){
-        perror("Failed to receive data in llread\n");
+        printf("Failed to receive data in llread\n");
         return -1;
     } 
     connectParam.totalReceivedIFrames++;
@@ -348,10 +342,10 @@ int llread(unsigned char *packet) //
     
     int written_bytes = writeBytesSerialPort(send_msg, 5);
     if (written_bytes == -1){
-        perror("No bytes written\n");
+        printf("No bytes written\n");
         return -1;        
     } else if (written_bytes < 5) {
-        perror("Could not write all bytes\n");
+        printf("Could not write all bytes\n");
         return -1;        
     }
 
@@ -362,21 +356,20 @@ int llread(unsigned char *packet) //
 // LLCLOSE
 ////////////////////////////////////////////////
 int llclose()
-{ // to do
+{
     unsigned char buf[5] = {0};
     setMessageState ret_state = START;
     
-    
-    if (connectParam.role == LlRx){
+    if (connectParam.role == LlRx){ //Lx
         while(ret_state != DISC_RCV){
             receive_packet(buf, &ret_state);
         }
         int written_bytes = writeBytesSerialPort(DISC_PCK1, 5);
         if (written_bytes == -1){
-            perror("No bytes written\n");
+            printf("No bytes written\n");
             return -1;        
         } else if (written_bytes < 5) {
-            perror("Could not write all bytes\n");
+            printf("Could not write all bytes\n");
             return -1;        
         }
         
@@ -387,16 +380,16 @@ int llclose()
         printf("Sent %d RR and %d REJ\n", connectParam.numSentRR, connectParam.numSentREJ);
     } else if (connectParam.role == LlTx) {
         if (send_packet_with_retries(DISC_PCK0, 5, &ret_state) == -1 || ret_state !=DISC_RCV){
-            perror("Failed to send packet in llclose\n");
+            printf("Failed to send packet in llclose\n");
             return -1;
         }
 
         int written_bytes = writeBytesSerialPort(UA_PCK1, 5);
         if (written_bytes == -1){
-            perror("No bytes written\n");
+            printf("No bytes written\n");
             return -1;        
         } else if (written_bytes < 5) {
-            perror("Could not write all bytes\n");
+            printf("Could not write all bytes\n");
             return -1;        
         }
 
@@ -406,10 +399,9 @@ int llclose()
 
     if (closeSerialPort() < 0)
     {
-        perror("closeSerialPort");
+        printf("closeSerialPort");
         return -1;
     }
-
     return 0;
 }
 

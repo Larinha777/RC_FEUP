@@ -18,7 +18,6 @@ int updateCurrentState(Packet *packet, unsigned char byte){
 
         case FLAG_RCV:
             if (byte == FLAG){
-                packet->cur_state = FLAG_RCV;
                 return 0;
             }
             if (byte == ADDRESS_BY_SENDER || byte == ADDRESS_BY_RECEIVER){
@@ -34,7 +33,8 @@ int updateCurrentState(Packet *packet, unsigned char byte){
                 return 0;
             }
             if (byte == CONTROL_SET || byte == CONTROL_UA || byte == CONTROL_DISC ||
-                byte == CONTROL_RR0 || byte == CONTROL_RR1 || byte == CONTROL_REJ0 || byte == CONTROL_REJ1 || byte == CONTROL_I0 || byte == CONTROL_I1){
+                byte == CONTROL_RR0 || byte == CONTROL_RR1 || byte == CONTROL_REJ0 || 
+                byte == CONTROL_REJ1 || byte == CONTROL_I0 || byte == CONTROL_I1){
                 packet->cur_state = C_RCV;
                 packet->control = byte;
                 return 0;
@@ -120,33 +120,17 @@ int updateCurrentState(Packet *packet, unsigned char byte){
                 last_data_byte = byte ^ XOR_OP;
             } else {
                 data_bcc ^= last_data_byte;
-                //printf("Data BCC: %d\n", data_bcc);
                 packet->data[data_counter] = last_data_byte;
                 last_data_byte = byte;
                 data_counter ++;
                 last_esc = 0;
             }
-        
-            
-            // more data than expected
-            // should never happen DUVIDAAAA!!!!!!!!!
-            if (data_counter > MAX_LL_DATA_SIZE){ 
-                printf("Received more data than expected\n");
-                if (packet->control == CONTROL_I0){
-                    packet->cur_state = REJ0_S;
-                } else if (packet->control == CONTROL_I1){
-                    packet->cur_state = REJ1_S;
-                }                 
-                return 0;
-            }
 
-            packet->cur_state = DATA_RCV;
             return 0;
 
         default:
             return -1;
     }
-    
 
     memset(packet->data, 0, MAX_APPL_DATA_SIZE);
     packet->cur_state = START;

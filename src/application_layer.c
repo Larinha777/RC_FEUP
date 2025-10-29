@@ -52,10 +52,10 @@ int file_exists(const char *filename) {
     return 0;
 }
 
-//used by Rx - confirmar se nome é repetido
+//used by Rx
 int createFile(FILE **fptr, const char *filename){ 
     if (filename == NULL){
-        perror("Empty string filename in createFile\n");
+        printf("Empty string filename in createFile\n");
         return -1;
     } 
 
@@ -67,7 +67,7 @@ int createFile(FILE **fptr, const char *filename){
         int len = strlen(filename2);
         char *temp = malloc(len + 2); 
         if (!temp) {
-            perror("malloc failed");
+            printf("malloc failed");
             free(filename2);
             return -1;
         }
@@ -81,7 +81,7 @@ int createFile(FILE **fptr, const char *filename){
     *fptr = fopen(filename2, "a");
     if (*fptr == NULL) {
         free(filename2);
-        perror("File creation failed in createFile\n");
+        printf("File creation failed in createFile\n");
         return -1;
     }
     free(filename2);
@@ -90,27 +90,25 @@ int createFile(FILE **fptr, const char *filename){
 
 int writeFile(FILE *fptr, unsigned char *data, int data_size){
     if (fptr == NULL){
-        perror("File pointer is null in writeFile\n");
+        printf("File pointer is null in writeFile\n");
         return -1;
     }
     if (data == NULL){
-        perror("Data pointer is null in writeFile\n"); // CORRIGIR -> ESTA A PRINTAR ESTA MSG
+        printf("Data pointer is null in writeFile\n");
         return -1;
     }
     if (data_size < 1){
-        perror("Size of data was not correctly given to writeFile\n");
+        printf("Size of data was not correctly given to writeFile\n");
         return -1;
     }
 
-    if(fwrite(data, 1, data_size, fptr) < 0){
-        perror("Could not write in the file in writeFile\n");
+    if(fwrite(data, 1, data_size, fptr) != data_size){
+        printf("Could not write in the file in writeFile\n");
         return -1;
     }
-
     return 0;
 }
 
-//to do reviews, need to do end packet
 int parsePck(unsigned char *packet, int packet_size, char **filename, int *file_size){
     if(packet[0] == 1){ // packet control START
         int p_index = 1; 
@@ -138,7 +136,7 @@ int parsePck(unsigned char *packet, int packet_size, char **filename, int *file_
                 int end_file_size = big_endian_to_int(packet + p_index, L);
 
                 if (end_file_size != *file_size){
-                    perror("Size in Start packet differs from End packet\n");
+                    printf("Size in Start packet differs from End packet\n");
                     return -1;
                 }
             }
@@ -146,7 +144,7 @@ int parsePck(unsigned char *packet, int packet_size, char **filename, int *file_
                 char *end_filename = malloc(L);
                 memcpy(end_filename, &packet[p_index], L);
                 if (strcmp(end_filename, *filename) != 0){
-                    perror("Filename in Start packet differs from End packet\n");
+                    printf("Filename in Start packet differs from End packet\n");
                     return -1;
                 }
             }
@@ -174,12 +172,12 @@ int extractDataPck(unsigned char *packet, int packet_size, unsigned char *data, 
 //used by Tx
 int openFile(const char *filename, FILE **fptr){
     if (filename[0] == '\0'){
-        perror("Empty string filename in openFile\n");
+        printf("Empty string filename in openFile\n");
         return -1;
     } 
     *fptr = fopen(filename, "r");
     if (!*fptr) {
-        perror("Failed to open file\n");
+        printf("Failed to open file\n");
         return -1;
     }
     return 0;
@@ -216,7 +214,6 @@ void buildCtrlPck(unsigned char *packet, int *packet_size, unsigned char control
     packet[index++] = 1;
     packet[index++] = len_filename;
     memcpy((packet) + index, filename, len_filename);
-
 } 
 
 void buildDataPck(unsigned char *packet, int *packet_size, unsigned char *data, int *data_size){
@@ -242,7 +239,7 @@ void testConnection(LinkLayer connectionParameters){
     if (connectionParameters.role == LlTx){
         printf("-Tx: Sending test message\n");
         if (llwrite(test_msg, msg_size) == -1){
-            perror("Could not send test message\n");
+            printf("Could not send test message\n");
             return;
         }
         printf("-Tx: Test message sent\n");
@@ -250,14 +247,12 @@ void testConnection(LinkLayer connectionParameters){
         printf("-Rx: Waiting to receive test message\n");
         int rcv_size = llread(rcv_buf);
         if (rcv_size == -1){
-            perror("Could not receive test message\n");
+            printf("Could not receive test message\n");
             return;
         }
         printf("-Rx: Test message received: %.*s\n", rcv_size, rcv_buf);
     }
 }
-
-
 
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
@@ -269,7 +264,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     } else if (strcmp(role, "rx") == 0) {
         connectionParameters.role = LlRx;
     } else {
-        perror("Did not understand role");
+        printf("Did not understand role");
         return;
     }
     connectionParameters.baudRate = baudRate;
@@ -313,7 +308,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             else if (packet_size == 0) continue;
             parse_res = parsePck(packet, packet_size, &filename_rcv, &file_size);
             if(parse_res == -1){
-                perror("Could not parse packet received\n");
+                printf("Could not parse packet received\n");
                 return;
             } 
         } while (parse_res != 1);
@@ -331,17 +326,20 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             if(parse_res == -1) return;
             else if(parse_res == 2) { 
                 if (extractDataPck(packet, packet_size, data, &data_size) == -1){
-                    perror("Failed to extract data \n");
+                    printf("Failed to extract data \n");
                     return;
                 }
                 data_acc += data_size;
             }
-            if (parse_res == 3) break;           
+            if (parse_res == 3) {
+                closeFile(fptr);
+                break;  
+            }         
             if(writeFile(fptr, data, data_size) == -1) return;
         }
         if (data_acc != file_size){
             printf("%d %d\n", data_acc, file_size);
-            perror("Total size of the data received is different from expected data");
+            printf("Total size of the data received is different from expected data");
             return;
         }
 
@@ -361,13 +359,12 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         fstat(fd, &st);
         int file_total_size = st.st_size;
         
-
         buildCtrlPck(packet, &packet_size, 1, filename, file_total_size);
 
         printf("-Built start packet\n");
 
         if (llwrite(packet, packet_size) == -1){
-            perror("Could not send START packet\n");
+            printf("Could not send START packet\n");
             return;
         }
 
@@ -381,7 +378,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             buildDataPck(packet, &packet_size, data_buf, &frag_file_res); 
 
             if (llwrite(packet, packet_size) == -1){
-                perror("Could not send data packet\n");
+                printf("Could not send data packet\n");
                 return;
             }
             i++;
