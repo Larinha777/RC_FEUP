@@ -25,10 +25,9 @@ typedef struct
 	unsigned int numSentREJ;
 	unsigned int numReceivedREJ;
 
-	unsigned int totalReceivedIFrames;
-	unsigned int dupReceivedIFrames;
-	unsigned int totalSentIFrames;
-	unsigned int dupSentIFrames;
+	unsigned int totalIFrames;
+	unsigned int ACKedIFrames;
+	unsigned int REJIFrames;
 
 } LinkLayer;
 

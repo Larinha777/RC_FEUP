@@ -8,11 +8,42 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 
+//Aux funtions
+void clearProgressBar() {
+    fprintf(stdout, "\r");
+    for (int i = 0; i < PROGRESS_BAR_SIZE + 10; i++)
+        fprintf(stdout, " ");
+    fprintf(stdout, "\r");
+    fflush(stdout);
+}
 
-void print_pck(unsigned char *packet, int packet_size){
-    for(int i = 0; i < packet_size; i++){
-        printf("var = 0x%02X\n", packet[i]);
+void printProgressBar(int progress, int total) {
+    if (total <= 0) total = 1;
+
+    int percentage = (int)((((double)progress) / (double)total) * 100  + 0.5);
+    int num_separators = (int)((((double)progress) / total) * PROGRESS_BAR_SIZE + 0.5);;
+    
+    if (percentage < 0) percentage = 0;
+    if (percentage > 100) {
+        percentage = 100; 
+        num_separators = PROGRESS_BAR_SIZE;
     }
+
+    fprintf(stdout, "\r[");
+    for (int i = 0; i < num_separators; ++i) 
+      fprintf(stdout, "%c", COMPLETED_PROGRESS_CHAR);
+    
+    if (percentage == 100){
+        fprintf(stdout, "%c", COMPLETED_PROGRESS_CHAR);
+    } else {
+        fprintf(stdout, "%c", END_PROGRESS_CHAR);
+    }
+
+    for (int i = num_separators; i < PROGRESS_BAR_SIZE; ++i) 
+      fprintf(stdout, "%c", NO_PROGRESS_CHAR);
+    
+    fprintf(stdout, "]  %3d%% ", percentage);
+    fflush(stdout);
 }
 
 int big_endian_to_int(unsigned char *out, int len) {
@@ -117,7 +148,6 @@ int parsePck(unsigned char *packet, int packet_size, char **filename, int *file_
             unsigned char L = packet[p_index++];
             if(T == 0){
                 *file_size = big_endian_to_int(packet+p_index, L);
-                printf("Start parse of file with size %d\n", *file_size);
             }
             else if(T == 1){
                 *filename = malloc(L);
@@ -231,28 +261,6 @@ void closeFile(FILE *fptr){
     fclose(fptr);
 }
 
-void testConnection(LinkLayer connectionParameters){
-    unsigned char test_msg[] = "Hello, this is a test message!";
-    unsigned char rcv_buf[100] = {0};
-    int msg_size = sizeof(test_msg);
-
-    if (connectionParameters.role == LlTx){
-        printf("-Tx: Sending test message\n");
-        if (llwrite(test_msg, msg_size) == -1){
-            printf("Could not send test message\n");
-            return;
-        }
-        printf("-Tx: Test message sent\n");
-    } else if (connectionParameters.role == LlRx){
-        printf("-Rx: Waiting to receive test message\n");
-        int rcv_size = llread(rcv_buf);
-        if (rcv_size == -1){
-            printf("Could not receive test message\n");
-            return;
-        }
-        printf("-Rx: Test message received: %.*s\n", rcv_size, rcv_buf);
-    }
-}
 
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
@@ -276,10 +284,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     connectionParameters.numSentREJ = 0; 
     connectionParameters.numSentRR = 0; 
 
-    connectionParameters.totalReceivedIFrames = 0;
-	connectionParameters.dupReceivedIFrames = 0;
-	connectionParameters.totalSentIFrames = 0;
-	connectionParameters.dupSentIFrames = 0;
+    connectionParameters.totalIFrames = 0;
+	connectionParameters.ACKedIFrames = 0;
+	connectionParameters.REJIFrames = 0;
 
     // open connection 
     // done by both Tx and Rx
@@ -288,14 +295,11 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         return;
     }
     
-    printf("-llopen complete\n");////
-
     struct timeval start, end;
     gettimeofday(&start, NULL);
 
     if (connectionParameters.role == LlRx){ //Rx
-        printf("-Reached rx in app layer\n");////
-        
+        int progress = 0;
         unsigned char packet[MAX_APPL_PACKET_SIZE];
         char *filename_rcv;
         int file_size = 0;
@@ -316,7 +320,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         FILE *fptr = NULL;
         if (createFile(&fptr, filename) == -1) return;
         unsigned char data[MAX_APPL_DATA_SIZE] = {0};
-        int data_size;
+        int data_size = 0;
         int data_acc = 0;
         while(TRUE){
             packet_size = llread(packet); 
@@ -325,6 +329,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             parse_res = parsePck(packet, packet_size, &filename_rcv, &file_size);
             if(parse_res == -1) return;
             else if(parse_res == DATA_CONTROL_FIELD) { 
+                progress += data_size;
+                clearProgressBar();
+                printProgressBar(progress, file_size);    
                 if (extractDataPck(packet, packet_size, data, &data_size) == -1){
                     printf("Failed to extract data \n");
                     return;
@@ -337,6 +344,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             }         
             if(writeFile(fptr, data, data_size) == -1) return;
         }
+        printProgressBar(progress, file_size);  
+        printf("\n\n");
+        
         if (data_acc != file_size){
             printf("%d %d\n", data_acc, file_size);
             printf("Total size of the data received is different from expected data");
@@ -344,7 +354,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         }
 
     } else { //Tx
-        printf("-Reached tx in app layer\n");
+        int progress = 0;
 
         FILE * file = NULL;
         if (openFile(filename, &file) == -1) return;
@@ -360,9 +370,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         int file_total_size = st.st_size;
         
         buildCtrlPck(packet, &packet_size, 1, filename, file_total_size);
-
-        printf("-Built start packet\n");
-
+        
         if (llwrite(packet, packet_size) == -1){
             printf("Could not send START packet\n");
             return;
@@ -373,19 +381,25 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         int i = 1;
         while (TRUE){ // there is data in the file
             frag_file_res = readFragFile(file, data_buf, data_buf_size);
-            printf("-%d Read frag file with size %d, %d\n", i, data_buf_size, frag_file_res);
             if(frag_file_res < 1) break;
             buildDataPck(packet, &packet_size, data_buf, &frag_file_res); 
+
+            progress += data_buf_size;
+            printProgressBar(progress, file_total_size);
 
             if (llwrite(packet, packet_size) == -1){
                 printf("Could not send data packet\n");
                 return;
             }
             i++;
+            clearProgressBar();
         }
+
         buildCtrlPck(packet, &packet_size, 3, filename, file_total_size);
         llwrite(packet, packet_size);
 
+        printProgressBar(progress, file_total_size);
+        printf("\n\n");
     }
 
     gettimeofday(&end, NULL);
@@ -393,9 +407,10 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     double diff = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6;
 
     
-    printf("Elapsed time: %.4f seconds\n", diff);
+    printf("=== CHARACTERISATION OF THE PROTOCOL EFFICIENCY ===\n");
+    printf("  - Elapsed time: %.4f seconds\n", diff);
 
     if (llclose() == -1){
-        perror("Error on disconnecting in llclose\n");
+        printf("Error on disconnecting in llclose\n");
     }
 }

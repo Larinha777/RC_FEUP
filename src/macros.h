@@ -25,6 +25,12 @@
 #define DATA_CONTROL_FIELD 2
 #define END_CONTROL_FIELD 3
 
+// Progress bar
+#define PROGRESS_BAR_SIZE           40
+#define COMPLETED_PROGRESS_CHAR     '='
+#define END_PROGRESS_CHAR           '>'
+#define NO_PROGRESS_CHAR            '.'
+
 ////////////////////////////////////////////////
 //Data Link Layer
 ////////////////////////////////////////////////
