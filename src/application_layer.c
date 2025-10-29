@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 
 
 void print_pck(unsigned char *packet, int packet_size){
@@ -275,6 +276,16 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     connectionParameters.nRetransmissions = nTries;
     connectionParameters.timeout = timeout;
     
+    connectionParameters.numReceivedREJ = 0; 
+    connectionParameters.numReceivedRR = 0; 
+    connectionParameters.numSentREJ = 0; 
+    connectionParameters.numSentRR = 0; 
+
+    connectionParameters.totalReceivedIFrames = 0;
+	connectionParameters.dupReceivedIFrames = 0;
+	connectionParameters.totalSentIFrames = 0;
+	connectionParameters.dupSentIFrames = 0;
+
     // open connection 
     // done by both Tx and Rx
     if (llopen(connectionParameters) == -1){
@@ -284,8 +295,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     
     printf("-llopen complete\n");////
 
-    // testConnection(connectionParameters);
-    // return;
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
 
     if (connectionParameters.role == LlRx){ //Rx
         printf("-Reached rx in app layer\n");////
@@ -334,10 +345,6 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             return;
         }
 
-        if (llclose() == -1){
-            perror("Error on disconnecting in llclose\n");
-        }
-
     } else { //Tx
         printf("-Reached tx in app layer\n");
 
@@ -382,9 +389,16 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         buildCtrlPck(packet, &packet_size, 3, filename, file_total_size);
         llwrite(packet, packet_size);
 
-        if (llclose() == -1){
-            perror("Error on disconnecting in llclose\n");
-        }
     }
 
+    gettimeofday(&end, NULL);
+
+    double diff = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6;
+
+    
+    printf("Elapsed time: %.4f seconds\n", diff);
+
+    if (llclose() == -1){
+        perror("Error on disconnecting in llclose\n");
+    }
 }

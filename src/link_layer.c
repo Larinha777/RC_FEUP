@@ -16,8 +16,8 @@ int receive_packet(unsigned char *buf, setMessageState *state){
     unsigned char byte_rcv;
     while (TRUE)
     {
-        bytes = readByteSerialPort(&byte_rcv); //this might return -1, maybe check for that
-        if (bytes == -1){
+        bytes = readByteSerialPort(&byte_rcv); 
+        if (bytes <= 0){
             break;
         }
         if (updateCurrentState(&packet, byte_rcv) == -1){
@@ -63,13 +63,14 @@ int send_packet_with_retries(const unsigned char *send_buf, int bufSize, setMess
     
     alarmCount = 0;
     for (int tries = 0; tries < connectParam.nRetransmissions; tries++){
-
         int written_bytes = writeBytesSerialPort(send_buf, bufSize);
+        if (send_buf[2] == CONTROL_I0 || send_buf[2] == CONTROL_I1) connectParam.totalSentIFrames++;
         if (written_bytes == -1){
             alarm(0); 
             alarmEnabled = 0;
-            perror("No bytes written\n");
-            break;      
+            sleep(10);
+            printf("New try\n");
+            continue;     
         } else if (written_bytes < bufSize) {
             alarm(0); 
             alarmEnabled = 0;
@@ -85,10 +86,17 @@ int send_packet_with_retries(const unsigned char *send_buf, int bufSize, setMess
             unsigned char receive_buf;
             setMessageState cur_state;
             int bytes_read = receive_packet(&receive_buf, &cur_state);
+            //printf("Left");
             if (bytes_read == -1){
                 continue;
             }
         
+            if (cur_state == REJ0_S || cur_state == REJ1_S) {
+                connectParam.numReceivedREJ++;
+            }
+
+            if (cur_state == RR0_S || cur_state == RR1_S) connectParam.numReceivedRR++;
+
             if (cur_state == UA_RCV || cur_state == DISC_RCV || (cur_state == RR0_S && inf_frame_num == 1)  || (cur_state == RR1_S && inf_frame_num == 0) ){
                 *ret_state = cur_state;
                 alarm(0); 
@@ -214,7 +222,8 @@ int llwrite(const unsigned char *data_buf, int data_bufSize)
     }
 
     setMessageState ret_state = START;
-        
+    
+    connectParam.dupSentIFrames++;
     if (send_packet_with_retries(packet_buf, pck_p, &ret_state) == -1){
         perror("Error receiving packets in llwrite\n");
         return -1;
@@ -239,6 +248,7 @@ int llread(unsigned char *packet) //
         perror("Failed to receive data in llread\n");
         return -1;
     } 
+    connectParam.totalReceivedIFrames++;
     
     unsigned char send_msg[5] = {0};
     send_msg[0]=FLAG;
@@ -259,23 +269,27 @@ int llread(unsigned char *packet) //
 
         send_msg[2]=CONTROL_RR0;
         send_msg[3]=ADDRESS_BY_SENDER ^ CONTROL_RR0;
+        connectParam.numSentRR++;
         if (inf_frame_num == 1)
         { 
             memcpy(packet, buf, buf_size);
             bytes_returned = buf_size;
             inf_frame_num ^= 1;
+            connectParam.dupReceivedIFrames++;
         }
         break;
 
     case RR1_S:
         send_msg[2]=CONTROL_RR1;
         send_msg[3]=ADDRESS_BY_SENDER ^ CONTROL_RR1;
+        connectParam.numSentRR++;
         // correct packet was sent 
         // wanted 0 received 0
         if (inf_frame_num == 0){
             memcpy(packet, buf, buf_size);
             bytes_returned = buf_size;
             inf_frame_num ^= 1;
+            connectParam.dupReceivedIFrames++;
         }
 
         // if inf_fram_num == 1 
@@ -291,6 +305,7 @@ int llread(unsigned char *packet) //
         if (inf_frame_num == 0){
             send_msg[2] = CONTROL_REJ0;
             send_msg[3] = ADDRESS_BY_SENDER ^ CONTROL_REJ0;
+            connectParam.numSentREJ++;
         } 
 
         // if inf_fram_num == 1 
@@ -300,6 +315,7 @@ int llread(unsigned char *packet) //
         {
             send_msg[2] = CONTROL_RR1;
             send_msg[3] = ADDRESS_BY_SENDER ^ CONTROL_RR1;
+            connectParam.numSentRR++;
         }
         break;    
 
@@ -309,7 +325,9 @@ int llread(unsigned char *packet) //
         // wanted 0 received 1 (already has correct 1)
         if (inf_frame_num == 0){
             send_msg[2] = CONTROL_RR0;
-            send_msg[3] = ADDRESS_BY_SENDER ^ CONTROL_RR0;            
+            send_msg[3] = ADDRESS_BY_SENDER ^ CONTROL_RR0;   
+            connectParam.numSentRR++;
+         
         } 
 
         // if inf_fram_num == 1
@@ -319,13 +337,13 @@ int llread(unsigned char *packet) //
         {
             send_msg[2] = CONTROL_REJ1;
             send_msg[3] = ADDRESS_BY_SENDER ^ CONTROL_REJ1;
+            connectParam.numSentREJ++;
         }
 
         break;    
 
     default:
-        perror("Failed to identify the state in llread\n");
-        return -1;
+        return 0;
     }
     
     int written_bytes = writeBytesSerialPort(send_msg, 5);
@@ -365,7 +383,9 @@ int llclose()
         sleep(1);
         receive_packet(buf, &ret_state);
 
-    } else {
+        printf("Received a total of %d IFrames in which %d were correct\n", connectParam.totalReceivedIFrames, connectParam.dupReceivedIFrames);
+        printf("Sent %d RR and %d REJ\n", connectParam.numSentRR, connectParam.numSentREJ);
+    } else if (connectParam.role == LlTx) {
         if (send_packet_with_retries(DISC_PCK0, 5, &ret_state) == -1 || ret_state !=DISC_RCV){
             perror("Failed to send packet in llclose\n");
             return -1;
@@ -379,6 +399,9 @@ int llclose()
             perror("Could not write all bytes\n");
             return -1;        
         }
+
+        printf("Sent a total of %d IFrames in which %d were correct\n", connectParam.totalSentIFrames, connectParam.dupSentIFrames);
+        printf("Received %d RR and %d REJ\n", connectParam.numReceivedRR, connectParam.numReceivedREJ);
     }
 
     if (closeSerialPort() < 0)
