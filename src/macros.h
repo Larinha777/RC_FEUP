@@ -20,6 +20,11 @@
 // Maximum number of data bytes sent by the application layer to the link layer
 #define MAX_APPL_DATA_SIZE (MAX_APPL_PACKET_SIZE - 3)
 
+// Control packet recognition
+#define START_CONTROL_FIELD 1
+#define DATA_CONTROL_FIELD 2
+#define END_CONTROL_FIELD 3
+
 ////////////////////////////////////////////////
 //Data Link Layer
 ////////////////////////////////////////////////

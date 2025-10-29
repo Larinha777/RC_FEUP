@@ -110,7 +110,7 @@ int writeFile(FILE *fptr, unsigned char *data, int data_size){
 }
 
 int parsePck(unsigned char *packet, int packet_size, char **filename, int *file_size){
-    if(packet[0] == 1){ // packet control START
+    if(packet[0] == START_CONTROL_FIELD){ // packet control START
         int p_index = 1; 
         while(p_index < packet_size){
             unsigned char T = packet[p_index++];
@@ -127,7 +127,7 @@ int parsePck(unsigned char *packet, int packet_size, char **filename, int *file_
         }
         return 1;
 
-    } else if(packet[0] == 3){
+    } else if(packet[0] == END_CONTROL_FIELD){
         int p_index = 1; 
         while(p_index < packet_size){
             unsigned char T = packet[p_index++];
@@ -152,8 +152,8 @@ int parsePck(unsigned char *packet, int packet_size, char **filename, int *file_
         }
         return 3;
 
-    } else if(packet[0] == 2) {
-        return 2;
+    } else if(packet[0] == DATA_CONTROL_FIELD) {
+        return DATA_CONTROL_FIELD;
     }
     return -1;
 }
@@ -311,7 +311,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 printf("Could not parse packet received\n");
                 return;
             } 
-        } while (parse_res != 1);
+        } while (parse_res != START_CONTROL_FIELD);
 
         FILE *fptr = NULL;
         if (createFile(&fptr, filename) == -1) return;
@@ -324,14 +324,14 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             if(packet_size == 0) continue;
             parse_res = parsePck(packet, packet_size, &filename_rcv, &file_size);
             if(parse_res == -1) return;
-            else if(parse_res == 2) { 
+            else if(parse_res == DATA_CONTROL_FIELD) { 
                 if (extractDataPck(packet, packet_size, data, &data_size) == -1){
                     printf("Failed to extract data \n");
                     return;
                 }
                 data_acc += data_size;
             }
-            if (parse_res == 3) {
+            if (parse_res == END_CONTROL_FIELD) {
                 closeFile(fptr);
                 break;  
             }         
