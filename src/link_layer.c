@@ -63,10 +63,8 @@ int send_packet_with_retries(const unsigned char *send_buf, int bufSize, setMess
     
     alarmCount = 0;
     for (int tries = 0; tries < connectParam.nRetransmissions; tries++){
-        printf("Try nº: %d\n", tries+1);
-
         int written_bytes = writeBytesSerialPort(send_buf, bufSize);
-        if (send_buf[2] == CONTROL_I0 || send_buf[2] == CONTROL_I1) connectParam.totalSentIFrames++;
+        if (send_buf[2] == CONTROL_I0 || send_buf[2] == CONTROL_I1) connectParam.totalIFrames++;
         if (written_bytes == -1){
             alarm(0); 
             alarmEnabled = 0;
@@ -86,16 +84,19 @@ int send_packet_with_retries(const unsigned char *send_buf, int bufSize, setMess
             unsigned char receive_buf;
             setMessageState cur_state;
             int bytes_read = receive_packet(&receive_buf, &cur_state);
-            //printf("Left");
             if (bytes_read == -1){
                 continue;
             }
         
             if (cur_state == REJ0_S || cur_state == REJ1_S) {
                 connectParam.numReceivedREJ++;
+                connectParam.REJIFrames++;
             }
 
-            if (cur_state == RR0_S || cur_state == RR1_S) connectParam.numReceivedRR++;
+            if (cur_state == RR0_S || cur_state == RR1_S) {
+                connectParam.numReceivedRR++;
+                connectParam.ACKedIFrames++;
+            }
 
             if (cur_state == UA_RCV || cur_state == DISC_RCV || (cur_state == RR0_S && inf_frame_num == 1)  || (cur_state == RR1_S && inf_frame_num == 0) ){
                 *ret_state = cur_state;
@@ -105,7 +106,6 @@ int send_packet_with_retries(const unsigned char *send_buf, int bufSize, setMess
             }
 
             if ((cur_state == REJ0_S && inf_frame_num == 0) || (cur_state == REJ1_S && inf_frame_num == 1)){
-                printf("Received REJ\n"); ////
                 alarm(0); 
                 alarmEnabled = 0;
                 break;
@@ -138,7 +138,6 @@ int llopen(LinkLayer connectionParameters)
             printf("Failed to send packet in llopen of the transmiter\n");
             return -1;
         }
-        printf("Send set and received ua\n");////
         
     } else if (connectionParameters.role == LlRx) { //Receiver
         setMessageState state;
@@ -148,7 +147,6 @@ int llopen(LinkLayer connectionParameters)
             printf("Failed to receive packet in llopen of the receiver\n");
             return -1;
         } 
-        printf("Received Set\n");////
 
         int written_bytes = writeBytesSerialPort(UA_PCK0, 5);
         if (written_bytes == -1){
@@ -158,7 +156,6 @@ int llopen(LinkLayer connectionParameters)
             printf("Could not write all bytes\n");
             return -1;        
         } 
-        printf("Sent ua\n");////
     }
     return 0;
 }
@@ -217,13 +214,12 @@ int llwrite(const unsigned char *data_buf, int data_bufSize)
 
     setMessageState ret_state = START;
     
-    connectParam.dupSentIFrames++;
+    //connectParam.totalIFrames++;
     if (send_packet_with_retries(packet_buf, pck_p, &ret_state) == -1){
         printf("Error receiving packets in llwrite\n");
         return -1;
     }
 
-    printf("Successfully sent Packet I%d\n", inf_frame_num);////
     inf_frame_num ^= 1;
     return data_p;
     
@@ -237,12 +233,11 @@ int llread(unsigned char *packet) //
     setMessageState state;
     unsigned char buf[MAX_LL_DATA_SIZE] = {0};
     int buf_size = receive_packet(buf, &state);
-    printf("Size of packet in llread %d\n", buf_size);////
     if ( buf_size == -1){
         printf("Failed to receive data in llread\n");
         return -1;
     } 
-    connectParam.totalReceivedIFrames++;
+    connectParam.totalIFrames++;
     
     unsigned char send_msg[5] = {0};
     send_msg[0]=FLAG;
@@ -269,7 +264,7 @@ int llread(unsigned char *packet) //
             memcpy(packet, buf, buf_size);
             bytes_returned = buf_size;
             inf_frame_num ^= 1;
-            connectParam.dupReceivedIFrames++;
+            connectParam.ACKedIFrames++;
         }
         break;
 
@@ -283,7 +278,7 @@ int llread(unsigned char *packet) //
             memcpy(packet, buf, buf_size);
             bytes_returned = buf_size;
             inf_frame_num ^= 1;
-            connectParam.dupReceivedIFrames++;
+            connectParam.ACKedIFrames++;
         }
 
         // if inf_fram_num == 1 
@@ -300,6 +295,7 @@ int llread(unsigned char *packet) //
             send_msg[2] = CONTROL_REJ0;
             send_msg[3] = ADDRESS_BY_SENDER ^ CONTROL_REJ0;
             connectParam.numSentREJ++;
+            connectParam.REJIFrames++;
         } 
 
         // if inf_fram_num == 1 
@@ -332,6 +328,7 @@ int llread(unsigned char *packet) //
             send_msg[2] = CONTROL_REJ1;
             send_msg[3] = ADDRESS_BY_SENDER ^ CONTROL_REJ1;
             connectParam.numSentREJ++;
+            connectParam.REJIFrames++;
         }
 
         break;    
@@ -360,7 +357,7 @@ int llclose()
     unsigned char buf[5] = {0};
     setMessageState ret_state = START;
     
-    if (connectParam.role == LlRx){ //Lx
+    if (connectParam.role == LlRx){ //Rx
         while(ret_state != DISC_RCV){
             receive_packet(buf, &ret_state);
         }
@@ -375,10 +372,17 @@ int llclose()
         
         sleep(1);
         receive_packet(buf, &ret_state);
-
-        printf("Received a total of %d IFrames in which %d were correct\n", connectParam.totalReceivedIFrames, connectParam.dupReceivedIFrames);
-        printf("Sent %d RR and %d REJ\n", connectParam.numSentRR, connectParam.numSentREJ);
-    } else if (connectParam.role == LlTx) {
+        
+        printf(
+            "  - Total IFrames Received: %d\n"
+            "  - Used IFrames: %d\n"
+            "  - IFrames with errors: %d\n"
+            "  - RR Sent: %d\n"
+            "  - REJ Sent: %d\n\n",
+        connectParam.totalIFrames, connectParam.ACKedIFrames, connectParam.REJIFrames,
+        connectParam.numSentRR, connectParam.numSentREJ);
+        
+    } else if (connectParam.role == LlTx) { //Tx
         if (send_packet_with_retries(DISC_PCK0, 5, &ret_state) == -1 || ret_state !=DISC_RCV){
             printf("Failed to send packet in llclose\n");
             return -1;
@@ -392,9 +396,15 @@ int llclose()
             printf("Could not write all bytes\n");
             return -1;        
         }
-
-        printf("Sent a total of %d IFrames in which %d were correct\n", connectParam.totalSentIFrames, connectParam.dupSentIFrames);
-        printf("Received %d RR and %d REJ\n", connectParam.numReceivedRR, connectParam.numReceivedREJ);
+        printf(
+            "  - Total IFrames Sent: %d\n"
+            "  - ACKed IFrames: %d\n"
+            "  - Rejected IFrames : %d\n"
+            "  - IFrames without answer: %d\n"
+            "  - RR Received: %d\n"
+            "  - REJ Received: %d\n\n",
+        connectParam.totalIFrames, connectParam.ACKedIFrames, connectParam.REJIFrames, (connectParam.totalIFrames - connectParam.ACKedIFrames - connectParam.REJIFrames),
+        connectParam.numReceivedRR, connectParam.numReceivedREJ);
     }
 
     if (closeSerialPort() < 0)

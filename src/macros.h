@@ -20,6 +20,12 @@
 // Maximum number of data bytes sent by the application layer to the link layer
 #define MAX_APPL_DATA_SIZE (MAX_APPL_PACKET_SIZE - 3)
 
+
+#define PROGRESS_BAR_SIZE           40
+#define COMPLETED_PROGRESS_CHAR     '='
+#define END_PROGRESS_CHAR           '>'
+#define NO_PROGRESS_CHAR            '.'
+
 ////////////////////////////////////////////////
 //Data Link Layer
 ////////////////////////////////////////////////
