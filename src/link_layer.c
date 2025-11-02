@@ -8,6 +8,11 @@
 LinkLayer connectParam;
 int inf_frame_num = 0;
 
+/**
+ * Receives a packet and updates the link layer state machine. 
+ * It also handles control and data frames, detecting when a full packet
+ * is received.
+ */
 int receive_packet(unsigned char *buf, setMessageState *state){
     Packet packet;
     packet.cur_state = START;
@@ -39,6 +44,11 @@ int receive_packet(unsigned char *buf, setMessageState *state){
     return 0;
 }
 
+/**
+ * This function attempts to send a packet multiple times until an expected
+ * acknowledgment (UA, RR, or DISC) is received or the maximum number of
+ * retransmissions is reached.
+ */
 int send_packet_with_retries(const unsigned char *send_buf, int bufSize, setMessageState *ret_state){ 
     if (send_buf == NULL){
         printf("Message to send was NULL\n");
@@ -121,6 +131,12 @@ int send_packet_with_retries(const unsigned char *send_buf, int bufSize, setMess
 ////////////////////////////////////////////////
 // LLOPEN
 ////////////////////////////////////////////////
+/**
+ * Opens the serial port and establishes the link-layer connection between 
+ * transmitter and receiver depending on the role:
+ * -Sends a SET frame and waits for a UA acknowledgment (Transmiter)
+ * -Waits for a SET frame and responds with UA (Receiver)
+ */
 int llopen(LinkLayer connectionParameters)
 {
     if (openSerialPort(connectionParameters.serialPort, connectionParameters.baudRate) < 0)
@@ -163,6 +179,12 @@ int llopen(LinkLayer connectionParameters)
 ////////////////////////////////////////////////
 // LLWRITE
 ////////////////////////////////////////////////
+/**
+ * Constructs an information (I) frame containing the given data buffer,
+ * applies byte stuffing to escape FLAG and ESC characters, and computes
+ * the BCC2 for error detection. While every frame is sent, the frame sequence 
+ * number (0/1) alternates after each successful transmission.
+ */
 int llwrite(const unsigned char *data_buf, int data_bufSize)
 { 
     if (data_buf == NULL){
@@ -228,6 +250,12 @@ int llwrite(const unsigned char *data_buf, int data_bufSize)
 ////////////////////////////////////////////////
 // LLREAD
 ////////////////////////////////////////////////
+/**
+ * Waits and reads an incoming frame, determines its type (RR, REJ, or data), and 
+ * performs the corresponding acknowledgment or rejection:
+ * -For correctly received information frames, it extracts and returns the data.
+ * -For corrupted or duplicate frames, it sends REJ or RR accordingly.
+ */
 int llread(unsigned char *packet) //
 {
     setMessageState state;
@@ -352,6 +380,12 @@ int llread(unsigned char *packet) //
 ////////////////////////////////////////////////
 // LLCLOSE
 ////////////////////////////////////////////////
+/**
+ * Performs the link-layer disconnection procedure, depending on the role:
+ * - Waits for DISC from the transmitter, replies with DISC, and waits for the final UA (Receiver)
+ * - Sends DISC, waits for DISC from receiver, and replies with UA (Transmitter)
+ * In the end it closes the serial port connection.
+ */
 int llclose()
 {
     unsigned char buf[5] = {0};

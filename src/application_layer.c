@@ -9,6 +9,10 @@
 #include <sys/time.h>
 
 //Aux funtions
+
+/**
+ * Clears the progress bar from the terminal display.
+ */
 void clearProgressBar() {
     fprintf(stdout, "\r");
     for (int i = 0; i < PROGRESS_BAR_SIZE + 10; i++)
@@ -17,6 +21,9 @@ void clearProgressBar() {
     fflush(stdout);
 }
 
+/**
+ * Prints a bar indicating file transfer progress, with the corresponding percentage.
+ */
 void printProgressBar(int progress, int total) {
     if (total <= 0) total = 1;
 
@@ -46,6 +53,9 @@ void printProgressBar(int progress, int total) {
     fflush(stdout);
 }
 
+/**
+ * Converts a big-endian byte array (most significant byte first) to an integer.
+ */
 int big_endian_to_int(unsigned char *out, int len) {
     int value = 0;
     for (int i = 0; i < len; i++) {
@@ -54,6 +64,9 @@ int big_endian_to_int(unsigned char *out, int len) {
     return value;
 }
 
+/**
+ * Converts an integer into a big-endian byte array (most significant byte first).
+ */
 int int_to_big_endian(int value, unsigned char *out) {
     int size = 0;
 
@@ -74,6 +87,10 @@ int int_to_big_endian(int value, unsigned char *out) {
     return size;
 }
 
+/**
+ * Checks if a file exists in the current directory. If successful, 
+ * the function closes the file and returns 1. Otherwise, returns 0.
+ */
 int file_exists(const char *filename) {
     FILE *f = fopen(filename, "r");
     if (f) {
@@ -84,6 +101,11 @@ int file_exists(const char *filename) {
 }
 
 //used by Rx
+/**
+ * Opens the file in append mode to allow data writing. It ensures 
+ * that the output filename does not overwrite an existing file, by 
+ * adding a prefix to the name, until a unique filename is generated.
+ */
 int createFile(FILE **fptr, const char *filename){ 
     if (filename == NULL){
         printf("Empty string filename in createFile\n");
@@ -119,6 +141,9 @@ int createFile(FILE **fptr, const char *filename){
     return 0;
 } 
 
+/**
+ * Writes the provided data into a file. Return 0 on success and -1 on failure.
+ */
 int writeFile(FILE *fptr, unsigned char *data, int data_size){
     if (fptr == NULL){
         printf("File pointer is null in writeFile\n");
@@ -140,6 +165,12 @@ int writeFile(FILE *fptr, unsigned char *data, int data_size){
     return 0;
 }
 
+/**
+ * Parses an application-layer packet by identifying the type of 
+ * packet (START, DATA, or END) and extracts the corresponding file 
+ * information (name and size). Returns 1 (START), 2(DATA) and 3 (END) 
+ * on success and -1 on failure.
+ */
 int parsePck(unsigned char *packet, int packet_size, char **filename, int *file_size){
     if(packet[0] == START_CONTROL_FIELD){ // packet control START
         int p_index = 1; 
@@ -188,6 +219,10 @@ int parsePck(unsigned char *packet, int packet_size, char **filename, int *file_
     return -1;
 }
 
+/**
+ * Extracts data and size from an application-layer DATA packet, 
+ * during file reconstruction on the receiver side.
+ */
 int extractDataPck(unsigned char *packet, int packet_size, unsigned char *data, int *data_size){
     // print_pck(packet, packet_size);
     if(packet[0] == 2){
@@ -200,6 +235,9 @@ int extractDataPck(unsigned char *packet, int packet_size, unsigned char *data, 
 }
 
 //used by Tx
+/**
+ * Opens the file that is going to be sent during transmission, for reading,
+ */
 int openFile(const char *filename, FILE **fptr){
     if (filename[0] == '\0'){
         printf("Empty string filename in openFile\n");
@@ -213,6 +251,10 @@ int openFile(const char *filename, FILE **fptr){
     return 0;
 } 
 
+
+/**
+ * Reads up to the specified number of bytes from a file and stores them in the provided buffer.
+ */
 int readFragFile(FILE *fptr, unsigned char *data, int data_size){
     int size_read = fread(data, 1, data_size, fptr);
 
@@ -222,6 +264,10 @@ int readFragFile(FILE *fptr, unsigned char *data, int data_size){
     return size_read;
 } 
 
+/**
+ * Constructs an application-layer control packet (START or END) containing 
+ * information such as the filename and total file size. 
+ */
 void buildCtrlPck(unsigned char *packet, int *packet_size, unsigned char control_field, const char *filename, int file_total_size){   
     unsigned char size_str[8];
     
@@ -246,6 +292,10 @@ void buildCtrlPck(unsigned char *packet, int *packet_size, unsigned char control
     memcpy((packet) + index, filename, len_filename);
 } 
 
+/**
+ * Constructs a data packet containing a data to be sent across the link layer.
+ * The packet includes a header with size information and the data bytes.
+ */
 void buildDataPck(unsigned char *packet, int *packet_size, unsigned char *data, int *data_size){
     // Get packet size            
     *packet_size = *data_size + 3;
@@ -261,7 +311,13 @@ void closeFile(FILE *fptr){
     fclose(fptr);
 }
 
-
+/**
+ * Depending on the role, this function:
+ * - Opens the specified file, builds control and data packets, and sends 
+ * them sequentially through the link layer. (Transmiter)
+ * - Waits for incoming packets, reconstructs the original file, 
+ * verifies integrity, and stores it on disk. (Receiver)
+ */
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
 {
