@@ -5,7 +5,7 @@
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <unistd.h>
-
+#include <netdb.h>
 #include <string.h>
 
 typedef struct {
@@ -16,7 +16,6 @@ typedef struct {
     char** ip;
 } Url_data;
 
-/* If the url is a valid one, it works, if not, it doesnt*/
 int parse_URL(char* url_str, Url_data* url_struct ){
    
     /* url does not start with ftp */
@@ -25,17 +24,14 @@ int parse_URL(char* url_str, Url_data* url_struct ){
         return 1;
     }
 
-    //printf("full str: %s\n",url_str);
-
     char* noFTP = strstr(url_str, "//") + 2;
-    //printf("noFTP str: %s\n",noFTP);
 
     char* part1 = strtok(noFTP, "@");
     char* part2 = strtok(NULL, "");
 
     if (part2 == NULL){ //no login
-        url_struct->user = "";
-        url_struct->password = "";
+        url_struct->user = NULL;
+        url_struct->password = NULL;
         url_struct->host = strtok(part1, "/");
         url_struct->url_path = strtok(NULL, "");
     } else {
@@ -47,11 +43,6 @@ int parse_URL(char* url_str, Url_data* url_struct ){
     return 0;
 }
 
-int check_valid_url( Url_data* url_struct ){
-    //se erro dar print
-    printf("Function check_valid_url not implemented\n");
-    return 1;
-}
 
 int getip( Url_data* url_struct ){
     struct hostent *h = gethostbyname(url_struct->host);
@@ -83,11 +74,6 @@ int main(int argc, char **argv) {
     // printf("password: %s\n",url.password);
     // printf("host: %s\n",url.host);
     // printf("url_path: %s\n",url.url_path);  
-    
-    
-    if (check_valid_url(&url) == 1){
-        return 1;
-    }
     
     if (getip(&url) == 1){ // buscar ip e companhia
         printf("Ip not found\n");
