@@ -8,12 +8,14 @@
 #include <netdb.h>
 #include <string.h>
 
+#define SERVER_PORT 21
+
 typedef struct {
     char* user;
     char* password;
     char* host;
     char* url_path;
-    char** ip;
+    char* ip;
 } Url_data;
 
 int parse_URL(char* url_str, Url_data* url_struct ){
@@ -44,13 +46,15 @@ int parse_URL(char* url_str, Url_data* url_struct ){
 }
 
 
-int getip( Url_data* url_struct ){
+int getip(Url_data* url_struct){
     struct hostent *h = gethostbyname(url_struct->host);
     if (h == NULL) {
         herror("gethostbyname");
         printf("Failed to resolve host.\n");
         return 1;
     }
+    url_struct->ip = inet_ntoa(*((struct in_addr *) h->h_addr));
+    return 0;
 }
 
 int main(int argc, char **argv) {
@@ -74,12 +78,39 @@ int main(int argc, char **argv) {
     // printf("password: %s\n",url.password);
     // printf("host: %s\n",url.host);
     // printf("url_path: %s\n",url.url_path);  
-    
+
     if (getip(&url) == 1){ // buscar ip e companhia
         printf("Ip not found\n");
         return 1;
     }
-
+    
+    int sockfd;
+    struct sockaddr_in server_addr;
+    
+    /*server address handling*/
+    bzero((char *) &server_addr, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = inet_addr(url.ip);    /*32 bit Internet address network byte ordered*/
+    server_addr.sin_port = htons(SERVER_PORT);        /*server TCP port must be network byte ordered */
+    
+    /*open a TCP socket*/
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("socket()");
+        return 1;
+    }
+    
+    /*connect to the server*/
+    if (connect(sockfd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
+        perror("connect()");
+        return 1;
+    }
+    
+    if (close(sockfd)<0) {
+        perror("close()");
+        return 1;
+    }
+    
+    return 1;
     
     /*open a TCP socket*/
     
