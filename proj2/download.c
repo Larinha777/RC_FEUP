@@ -16,6 +16,7 @@ typedef struct {
     char* host;
     char* url_path;
     char* ip;
+    int sockfd;
 } Url_data;
 
 int parse_URL(char* url_str, Url_data* url_struct ){
@@ -45,7 +46,6 @@ int parse_URL(char* url_str, Url_data* url_struct ){
     return 0;
 }
 
-
 int getip(Url_data* url_struct){
     struct hostent *h = gethostbyname(url_struct->host);
     if (h == NULL) {
@@ -56,6 +56,52 @@ int getip(Url_data* url_struct){
     url_struct->ip = inet_ntoa(*((struct in_addr *) h->h_addr));
     return 0;
 }
+
+int send_str(Url_data url_struct, char* buf, int buf_size){
+    /*send a string to the server*/
+    size_t bytes;
+    bytes = write(url_struct.sockfd, buf, buf_size);
+    if (bytes > 0)
+        printf("Bytes escritos %ld\n", bytes);
+    else {
+        perror("write()");
+        exit(-1);
+    }
+
+}
+
+int login(Url_data url_struct){
+    if(url_struct.user == NULL && url_struct.password == NULL) {
+        printf("There is no user nor password.\n");
+        return 0;
+    }
+    if(url_struct.user == NULL) {
+        printf("Missing user.\n");
+        return 1;
+    }
+    if(url_struct.password == NULL) {
+        printf("Missing password.\n");
+        return 1;
+    }
+
+    char buf[256];
+    strcpy(buf, "USER ");
+    strcat(buf, url_struct.user);
+    if (send_str(url_struct, buf, strlen(buf)) == 1) {
+        printf("Failed to send user\n");
+        return 1;
+    }
+
+    strcpy(buf, "PASS ");
+    strcat(buf, url_struct.password);
+    if (send_str(url_struct, buf, strlen(buf)) == 1) {
+        printf("Failed to send password\n");
+        return 1;
+    }
+
+    return 0;
+}
+
 
 int main(int argc, char **argv) {
     // ftp://demo:password@test.rebex.net/readme.txt
@@ -84,7 +130,6 @@ int main(int argc, char **argv) {
         return 1;
     }
     
-    int sockfd;
     struct sockaddr_in server_addr;
     
     /*server address handling*/
@@ -94,31 +139,28 @@ int main(int argc, char **argv) {
     server_addr.sin_port = htons(SERVER_PORT);        /*server TCP port must be network byte ordered */
     
     /*open a TCP socket*/
-    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    if ((url.sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("socket()");
         return 1;
     }
     
     /*connect to the server*/
-    if (connect(sockfd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
+    if (connect(url.sockfd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
         perror("connect()");
         return 1;
     }
-    
-    if (close(sockfd)<0) {
+
+    if (login(url) == 1){
+        printf("Failed to login\n");
+        return 1;
+    }
+
+    if (close(url.sockfd)<0) {
         perror("close()");
         return 1;
     }
-    
-    return 1;
-    
-    /*open a TCP socket*/
-    
-    /*connect to the server*/
-    
-
-    char *buf; // create the request
-    // verify user / password
+        
+        // verify user / password
         // login
     // qlqr cena passivo
 
