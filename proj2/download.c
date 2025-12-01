@@ -62,12 +62,84 @@ int send_str(Url_data url_struct, char* buf, int buf_size){
     size_t bytes;
     bytes = write(url_struct.sockfd, buf, buf_size);
     if (bytes > 0)
-        printf("Bytes escritos %ld\n", bytes);
+        printf("Bytes written %ld\n", bytes);
     else {
         perror("write()");
         exit(-1);
     }
 
+}
+
+/**
+ * Checks if a file exists in the current directory. If successful, 
+ * the function closes the file and returns 1. Otherwise, returns 0.
+ */
+int file_exists(const char *filename) {
+    FILE *f = fopen(filename, "r");
+    if (f) {
+        fclose(f);
+        return 1;
+    }
+    return 0;
+}
+
+/**
+ * Opens the file in append mode to allow data writing. It ensures 
+ * that the output filename does not overwrite an existing file, by 
+ * adding a prefix to the name, until a unique filename is generated.
+ */
+int createFile(FILE **fptr, const char *filename){ 
+    if (filename == NULL){
+        printf("Empty string filename in createFile\n");
+        return 1;
+    } 
+    
+    char *filename2 = malloc(strlen(filename) + 1);
+    strcpy(filename2, filename);
+    
+    while (file_exists(filename2))
+    {
+        int len = strlen(filename2);
+        char *temp = malloc(len + 2); 
+        if (!temp) {
+            printf("malloc failed");
+            free(filename2);
+            return 1;
+        }
+        
+        temp[0] = '1';
+        strcpy(temp + 1, filename2);
+        free(filename2);
+        filename2 = temp;
+    }
+    
+    *fptr = fopen(filename2, "a");
+    if (*fptr == NULL) {
+        free(filename2);
+        printf("File creation failed in createFile\n");
+        return 1;
+    }
+    free(filename2);
+    return 0;
+} 
+
+
+int read_file(Url_data url_struct){
+    /*read 1000 from the file in the server*/
+    FILE *fptr;
+    createFile(&fptr, "file_received.html");
+    int bytes, buf_size = 1000;
+    char buf[buf_size];
+    do
+    {
+        bytes = read(url_struct.sockfd, buf, buf_size);
+        if(fwrite(buf, 1, bytes, fptr) != bytes){
+            printf("Could not write in the file.\n");
+            return 1;
+        }
+        printf("Bytes read and written in the file %d\n", bytes);
+    }while(bytes == 1000);
+    return 0;
 }
 
 int login(Url_data url_struct){
@@ -155,24 +227,39 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    if (send_str(url, "PASV", strlen("PASV")) == 1) {
+        printf("Failed to send password\n");
+        return 1;
+    }
+
+    char buf[256];
+    strcpy(buf, "RETR ");
+    strcat(buf, url.url_path);
+    if (send_str(url, buf, strlen(buf)) == 1) {
+        printf("Failed to send file request\n");
+        return 1;
+    }
+
+    if(read_file(url) == 1){
+        printf("Failed to read file\n");
+        return 1;
+    }
+
+    if (send_str(url, "QUIT", strlen("QUIT")) == 1) {
+        printf("Failed to send file request\n");
+        return 1;
+    }
+
     if (close(url.sockfd)<0) {
         perror("close()");
         return 1;
     }
-        
-        // verify user / password
-        // login
-    // qlqr cena passivo
-
-    
 
 
     // verificar host / path
         // pedir ficheiro
         // verificar se está correto
-            // criar ficheiro com esse conteudo
-
-            
+            // criar ficheiro com esse conteudo    
 
     return 0;
 }
