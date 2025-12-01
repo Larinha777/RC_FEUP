@@ -123,11 +123,26 @@ int createFile(FILE **fptr, const char *filename){
     return 0;
 } 
 
+// pub/gnu/emacs/elisp-manual-21-2.8.tar.gz
+
+int get_filename(Url_data url_struct, char **filename){
+    char *next = strtok(url_struct.url_path, "/");
+    
+    do{
+        *filename = next;
+        next = strtok(NULL, "/");
+    } while (next != NULL);
+
+    return 0;
+}
 
 int read_file(Url_data url_struct){
     /*read 1000 from the file in the server*/
     FILE *fptr;
-    createFile(&fptr, "file_received.html");
+    char *filename;
+    get_filename(url_struct, &filename);
+
+    createFile(&fptr, filename);
     int bytes, buf_size = 1000;
     char buf[buf_size];
     do
