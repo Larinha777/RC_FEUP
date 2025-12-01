@@ -54,8 +54,12 @@ int check_valid_url( Url_data* url_struct ){
 }
 
 int getip( Url_data* url_struct ){
-    printf("Function getip not implemented\n");
-    return 1;
+    struct hostent *h = gethostbyname(url_struct->host);
+    if (h == NULL) {
+        herror("gethostbyname");
+        printf("Failed to resolve host.\n");
+        return 1;
+    }
 }
 
 int main(int argc, char **argv) {
