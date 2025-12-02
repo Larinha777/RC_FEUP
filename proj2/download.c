@@ -9,14 +9,18 @@
 #include <string.h>
 
 #define SERVER_PORT 21
+#define DATA_PORT 6000
 
 typedef struct {
     char* user;
     char* password;
     char* host;
     char* url_path;
-    char* ip;
-    int sockfd;
+    char* res_ip;
+    int res_sockfd;    
+    char* data_ip;
+    int data_port;
+    int data_sockfd;
 } Url_data;
 
 int parse_URL(char* url_str, Url_data* url_struct ){
@@ -53,21 +57,46 @@ int getip(Url_data* url_struct){
         printf("Failed to resolve host.\n");
         return 1;
     }
-    url_struct->ip = inet_ntoa(*((struct in_addr *) h->h_addr));
+    url_struct->res_ip = inet_ntoa(*((struct in_addr *) h->h_addr));
     return 0;
+}
+
+int get_sockfd(char* ip_adddr, int port){
+    struct sockaddr_in server_addr;
+    int sockfd;
+    
+    /*server address handling*/
+    bzero((char *) &server_addr, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = inet_addr(ip_adddr);    /*32 bit Internet address network byte ordered*/
+    server_addr.sin_port = htons(port);        /*server TCP port must be network byte ordered */
+    
+    /*open a TCP socket*/
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("socket()");
+        return -1;
+    }
+    
+    /*connect to the server*/
+    if (connect(sockfd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
+        perror("connect()");
+        return -1;
+    }
+
+    return sockfd;
 }
 
 int send_str(Url_data url_struct, char* buf, int buf_size){
     /*send a string to the server*/
     size_t bytes;
-    bytes = write(url_struct.sockfd, buf, buf_size);
+    bytes = write(url_struct.res_sockfd, buf, buf_size);
     if (bytes > 0)
         printf("Bytes written %ld\n", bytes);
     else {
         perror("write()");
-        exit(-1);
+        return 1;
     }
-
+    return 0;
 }
 
 /**
@@ -123,8 +152,6 @@ int createFile(FILE **fptr, const char *filename){
     return 0;
 } 
 
-// pub/gnu/emacs/elisp-manual-21-2.8.tar.gz
-
 int get_filename(Url_data url_struct, char **filename){
     char *next = strtok(url_struct.url_path, "/");
     
@@ -147,13 +174,23 @@ int read_file(Url_data url_struct){
     char buf[buf_size];
     do
     {
-        bytes = read(url_struct.sockfd, buf, buf_size);
+        bytes = read(url_struct.data_sockfd, buf, buf_size);
         if(fwrite(buf, 1, bytes, fptr) != bytes){
             printf("Could not write in the file.\n");
             return 1;
         }
         printf("Bytes read and written in the file %d\n", bytes);
     }while(bytes == 1000);
+    return 0;
+}
+
+int read_str(Url_data url_struct, char *msg, int msg_len) {
+    int bytes = read(url_struct.res_sockfd, msg, msg_len);
+    printf("%.*s", bytes, msg);
+    return bytes;
+}
+
+int check_msg(char *msg, int msg_len, char* code) {
     return 0;
 }
 
@@ -174,25 +211,65 @@ int login(Url_data url_struct){
     char buf[256];
     strcpy(buf, "USER ");
     strcat(buf, url_struct.user);
+    strcat(buf, "\r\n");
     if (send_str(url_struct, buf, strlen(buf)) == 1) {
         printf("Failed to send user\n");
+        return 1;
+    }
+    
+
+    int msg_size = 1000;
+    char msg[msg_size];
+    int bytes = read_str(url_struct, msg, msg_size);
+    if (bytes == -1) {
+        printf("Failed to read message\n");
+        return 1;
+    }
+
+    if (check_msg(buf, bytes, "331") == 1) {
+        printf("Message is not the one expected\n");
         return 1;
     }
 
     strcpy(buf, "PASS ");
     strcat(buf, url_struct.password);
+    strcat(buf, "\r\n");
     if (send_str(url_struct, buf, strlen(buf)) == 1) {
         printf("Failed to send password\n");
         return 1;
     }
+    bytes  = read_str(url_struct, msg, msg_size);
+    if (bytes == -1) {
+        printf("Failed to read message\n");
+        return 1;
+    }
+
+    if (check_msg(buf, bytes, "230") == 1) {
+        printf("Message is not the one expected\n");
+        return 1;
+    }
+    return 0;
+}
+
+int parse_pasv(Url_data *url_struct, char *msg, int msg_len) {
+    //exemplo: 227 Entering Passive Mode (194,108,117,16,4,15)
+    strtok(msg, "(");
+    char *p1 = strtok(NULL, ",");
+    char *p2 = strtok(NULL, ",");
+    char *p3 = strtok(NULL, ",");
+    char *p4 = strtok(NULL, ",");
+    char *p5 = strtok(NULL, ",");
+    char *p6 = strtok(NULL, ")");
+    
+    url_struct->data_ip = malloc(32);  
+    snprintf(url_struct->data_ip, 32, "%s.%s.%s.%s", p1, p2, p3, p4);
+
+    url_struct->data_port = atoi(p5) * 256 + atoi(p6);
 
     return 0;
 }
 
-
 int main(int argc, char **argv) {
-    // ftp://demo:password@test.rebex.net/readme.txt
-
 
     if (argc > 2){
         printf("Only one argument needed. The rest will be ignored. Carrying ON.\n");
@@ -207,74 +284,96 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // printf("user: %s\n",url.user);
-    // printf("password: %s\n",url.password);
-    // printf("host: %s\n",url.host);
-    // printf("url_path: %s\n",url.url_path);  
-
-    if (getip(&url) == 1){ // buscar ip e companhia
+    if (getip(&url) == 1){
         printf("Ip not found\n");
         return 1;
     }
-    
-    struct sockaddr_in server_addr;
-    
-    /*server address handling*/
-    bzero((char *) &server_addr, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr(url.ip);    /*32 bit Internet address network byte ordered*/
-    server_addr.sin_port = htons(SERVER_PORT);        /*server TCP port must be network byte ordered */
-    
-    /*open a TCP socket*/
-    if ((url.sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        perror("socket()");
-        return 1;
-    }
-    
-    /*connect to the server*/
-    if (connect(url.sockfd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
-        perror("connect()");
+
+    url.res_sockfd = get_sockfd(url.res_ip,  SERVER_PORT);
+    if (url.res_sockfd == -1){
         return 1;
     }
 
+    int msg_size = 1000;
+    char msg[msg_size];
+    int bytes_read = read_str(url, msg, msg_size);
+    if (bytes_read == -1) {
+        printf("Failed to read message\n");
+        return 1;
+    }
+    
+    if (check_msg(msg, bytes_read, "220") == 1) {
+        printf("Message is not the one expected\n");
+        return 1;
+    }
+    
     if (login(url) == 1){
         printf("Failed to login\n");
         return 1;
     }
 
-    if (send_str(url, "PASV", strlen("PASV")) == 1) {
+
+    if (send_str(url, "PASV\r\n", strlen("PASV\r\n")) == 1) {
         printf("Failed to send password\n");
         return 1;
     }
+    bytes_read = read_str(url, msg, msg_size);
+    if (bytes_read == -1) {
+        printf("Failed to read message\n");
+        return 1;
+    }
+    if (check_msg(msg, bytes_read, "227") == 1) {
+        printf("Message is not the one expected\n");
+        return 1;
+    }
+    if (parse_pasv(&url, msg, bytes_read) == 1) {
+        printf("Pasv message could not be understood\n");
+        return 1;
+    }
+
+
+
+    url.data_sockfd = get_sockfd(url.data_ip, url.data_port);
+    if (url.data_sockfd == -1){
+        return 1;
+    }
+
 
     char buf[256];
     strcpy(buf, "RETR ");
     strcat(buf, url.url_path);
+    strcat(buf, "\r\n");
     if (send_str(url, buf, strlen(buf)) == 1) {
         printf("Failed to send file request\n");
         return 1;
     }
+    bytes_read = read_str(url, msg, msg_size);
+    if (bytes_read == -1) {
+        printf("Failed to read message\n");
+        return 1;
+    }
+    if (check_msg(msg, bytes_read, "150") == 1) {
+        printf("Message is not the one expected\n");
+        return 1;
+    }
+
+
 
     if(read_file(url) == 1){
         printf("Failed to read file\n");
         return 1;
     }
 
-    if (send_str(url, "QUIT", strlen("QUIT")) == 1) {
+
+    if (send_str(url, "QUIT\r\n", strlen("QUIT\r\n")) == 1) {
         printf("Failed to send file request\n");
         return 1;
     }
 
-    if (close(url.sockfd)<0) {
+    if (close(url.res_sockfd)<0) {
         perror("close()");
         return 1;
     }
-
-
-    // verificar host / path
-        // pedir ficheiro
-        // verificar se está correto
-            // criar ficheiro com esse conteudo    
 
     return 0;
 }
