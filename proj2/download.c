@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -7,9 +6,12 @@
 #include <unistd.h>
 #include <netdb.h>
 #include <string.h>
+#include <sys/select.h>
+#include <errno.h>
 
 #define SERVER_PORT 21
-#define DATA_PORT 6000
+#define USER_DEFAULT "anonymous"
+#define PASS_DEFAULT "password"
 
 typedef struct {
     char* user;
@@ -22,6 +24,7 @@ typedef struct {
     int data_port;
     int data_sockfd;
 } Url_data;
+
 
 int parse_URL(char* url_str, Url_data* url_struct ){
    
@@ -58,6 +61,7 @@ int getip(Url_data* url_struct){
         return 1;
     }
     url_struct->res_ip = inet_ntoa(*((struct in_addr *) h->h_addr));
+    printf("%s\n", url_struct->res_ip);
     return 0;
 }
 
@@ -184,9 +188,64 @@ int read_file(Url_data url_struct){
     return 0;
 }
 
-int read_str(Url_data url_struct, char *msg, int msg_len) {
+int read_str1(Url_data url_struct, char *msg, int msg_len) {
     int bytes = read(url_struct.res_sockfd, msg, msg_len);
     printf("%.*s", bytes, msg);
+    return bytes;
+}
+
+
+
+int read_str2(Url_data url_struct, char *buf, int maxlen) {
+    int timeout_sec = 1;
+    int i = 0;
+    fd_set rfds;
+    struct timeval tv;
+
+    while (i < maxlen - 1) {
+        FD_ZERO(&rfds);
+        FD_SET(url_struct.res_sockfd, &rfds);
+        tv.tv_sec = timeout_sec;
+        tv.tv_usec = 0;
+
+        int sel = select(url_struct.res_sockfd + 1, &rfds, NULL, NULL, &tv);
+        if (sel < 0) {
+            perror("select");
+            return -1;
+        } else if (sel == 0) {
+            //fprintf(stderr, "read_line: timeout after %d seconds\n", timeout_sec);
+            return -2;
+        }
+
+        ssize_t n = read(url_struct.res_sockfd, &buf[i], 1);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            perror("read");
+            return -1;
+        }
+        if (n == 0) { // EOF
+            break;
+        }
+
+        if (buf[i] == '\n') {
+            i++;
+            break;
+        }
+        i++;
+    }
+    buf[i] = '\0';
+    printf("%.*s", i+1, buf);
+
+    return i; // bytes read
+}
+
+int read_str(Url_data url_struct, char *buf, int maxlen) {
+    int bytes =  read_str2( url_struct, buf, maxlen);
+    char discard[maxlen];
+    int bytes_discard = bytes; 
+    while  (bytes_discard > 0 ){
+        bytes_discard = read_str2( url_struct, discard, maxlen);
+    }
     return bytes;
 }
 
@@ -196,14 +255,15 @@ int check_msg(char *msg, int msg_len, char* code) {
 
 int login(Url_data url_struct){
     if(url_struct.user == NULL && url_struct.password == NULL) {
-        printf("There is no user nor password.\n");
-        return 0;
-    }
-    if(url_struct.user == NULL) {
+        printf("There is no user nor password, assuming default ones.\n");
+        url_struct.user = USER_DEFAULT;
+        url_struct.password = PASS_DEFAULT;
+    } 
+    else if(url_struct.user == NULL) {
         printf("Missing user.\n");
         return 1;
     }
-    if(url_struct.password == NULL) {
+    else if(url_struct.password == NULL) {
         printf("Missing password.\n");
         return 1;
     }
@@ -343,6 +403,7 @@ int main(int argc, char **argv) {
     strcpy(buf, "RETR ");
     strcat(buf, url.url_path);
     strcat(buf, "\r\n");
+    printf("%s", buf);
     if (send_str(url, buf, strlen(buf)) == 1) {
         printf("Failed to send file request\n");
         return 1;
@@ -356,8 +417,6 @@ int main(int argc, char **argv) {
         printf("Message is not the one expected\n");
         return 1;
     }
-
-
 
     if(read_file(url) == 1){
         printf("Failed to read file\n");
