@@ -168,7 +168,6 @@ int get_filename(Url_data url_struct, char **filename){
 }
 
 int read_file(Url_data url_struct){
-    /*read 1000 from the file in the server*/
     FILE *fptr;
     char *filename;
     get_filename(url_struct, &filename);
@@ -176,15 +175,16 @@ int read_file(Url_data url_struct){
     createFile(&fptr, filename);
     int bytes, buf_size = 1000;
     char buf[buf_size];
-    do
-    {
-        bytes = read(url_struct.data_sockfd, buf, buf_size);
-        if(fwrite(buf, 1, bytes, fptr) != bytes){
+    while ((bytes = read(url_struct.data_sockfd, buf, buf_size)) > 0) {
+        if (fwrite(buf, 1, bytes, fptr) != (size_t)bytes) {
             printf("Could not write in the file.\n");
+            fclose(fptr);
             return 1;
         }
-        printf("Bytes read and written in the file %d\n", bytes);
-    }while(bytes == 1000);
+        printf("Bytes read and written in the file: %d\n", bytes);
+    }
+
+    fclose(fptr);
     return 0;
 }
 
@@ -193,8 +193,6 @@ int read_str1(Url_data url_struct, char *msg, int msg_len) {
     printf("%.*s", bytes, msg);
     return bytes;
 }
-
-
 
 int read_str2(Url_data url_struct, char *buf, int maxlen) {
     int timeout_sec = 1;
@@ -250,7 +248,15 @@ int read_str(Url_data url_struct, char *buf, int maxlen) {
 }
 
 int check_msg(char *msg, int msg_len, char* code) {
-    return 0;
+    if (msg == NULL || code == NULL || msg_len < 3) {
+        return 1;
+    }
+    
+    if (strncmp(msg, code, 3) == 0) {
+        return 0;
+    }
+    //printf("Expected FTP code %s, got: %.*s\n", code, msg_len, msg);
+    return 1;
 }
 
 int login(Url_data url_struct){
@@ -277,7 +283,6 @@ int login(Url_data url_struct){
         return 1;
     }
     
-
     int msg_size = 1000;
     char msg[msg_size];
     int bytes = read_str(url_struct, msg, msg_size);
@@ -286,7 +291,7 @@ int login(Url_data url_struct){
         return 1;
     }
 
-    if (check_msg(buf, bytes, "331") == 1) {
+    if (check_msg(msg, bytes, "331") == 1) {
         printf("Message is not the one expected\n");
         return 1;
     }
@@ -304,7 +309,7 @@ int login(Url_data url_struct){
         return 1;
     }
 
-    if (check_msg(buf, bytes, "230") == 1) {
+    if (check_msg(msg, bytes, "230") == 1) {
         printf("Message is not the one expected\n");
         return 1;
     }
@@ -340,7 +345,7 @@ int main(int argc, char **argv) {
 
     Url_data url;
 
-    if (parse_URL( argv[1], &url) == 1){
+    if (parse_URL(argv[1], &url) == 1){
         return 1;
     }
 
@@ -372,6 +377,15 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    if (send_str(url, "TYPE I\r\n", strlen("TYPE I\r\n")) == 1) {
+        printf("Failed to send TYPE I\n");
+        return 1;
+    }
+    bytes_read = read_str(url, msg, msg_size);
+    if (check_msg(msg, bytes_read, "200") == 1) {
+        printf("Binary mode not accepted\n");
+        return 1;
+    }
 
     if (send_str(url, "PASV\r\n", strlen("PASV\r\n")) == 1) {
         printf("Failed to send password\n");
@@ -391,13 +405,10 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-
-
     url.data_sockfd = get_sockfd(url.data_ip, url.data_port);
     if (url.data_sockfd == -1){
         return 1;
     }
-
 
     char buf[256];
     strcpy(buf, "RETR ");
@@ -413,7 +424,8 @@ int main(int argc, char **argv) {
         printf("Failed to read message\n");
         return 1;
     }
-    if (check_msg(msg, bytes_read, "150") == 1) {
+    
+    if (check_msg(msg, bytes_read, "150") == 1 && check_msg(msg, bytes_read, "125") == 1) {
         printf("Message is not the one expected\n");
         return 1;
     }
@@ -422,7 +434,6 @@ int main(int argc, char **argv) {
         printf("Failed to read file\n");
         return 1;
     }
-
 
     if (send_str(url, "QUIT\r\n", strlen("QUIT\r\n")) == 1) {
         printf("Failed to send file request\n");
