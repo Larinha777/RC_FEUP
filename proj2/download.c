@@ -11,7 +11,7 @@
 
 #define SERVER_PORT 21
 #define USER_DEFAULT "anonymous"
-#define PASS_DEFAULT "password"
+#define PASS_DEFAULT "anonymous"
 
 typedef struct {
     char* user;
@@ -92,9 +92,7 @@ int send_str(Url_data url_struct, char* buf, int buf_size){
     /*send a string to the server*/
     size_t bytes;
     bytes = write(url_struct.res_sockfd, buf, buf_size);
-    if (bytes > 0)
-        printf("Bytes written %ld\n", bytes);
-    else {
+    if (bytes <= 0){
         perror("write()");
         return 1;
     }
