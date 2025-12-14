@@ -25,9 +25,7 @@ typedef struct {
     int data_sockfd;
 } Url_data;
 
-
 int parse_URL(char* url_str, Url_data* url_struct ){
-   
     /* url does not start with ftp */
     if (strncmp("ftp", url_str, 3)){ 
         printf("Cannot handle cases where the url does not start with ftp\n");
@@ -172,7 +170,7 @@ int read_file(Url_data url_struct){
     char *filename;
     get_filename(url_struct, &filename);
 
-    createFile(&fptr, filename);
+    if (createFile(&fptr, filename) == 1) return 1;
     int bytes, buf_size = 1000;
     char buf[buf_size];
     while ((bytes = read(url_struct.data_sockfd, buf, buf_size)) > 0) {
@@ -188,11 +186,6 @@ int read_file(Url_data url_struct){
     return 0;
 }
 
-int read_str1(Url_data url_struct, char *msg, int msg_len) {
-    int bytes = read(url_struct.res_sockfd, msg, msg_len);
-    printf("%.*s", bytes, msg);
-    return bytes;
-}
 
 int read_str2(Url_data url_struct, char *buf, int maxlen) {
     int timeout_sec = 1;
@@ -211,7 +204,6 @@ int read_str2(Url_data url_struct, char *buf, int maxlen) {
             perror("select");
             return -1;
         } else if (sel == 0) {
-            //fprintf(stderr, "read_line: timeout after %d seconds\n", timeout_sec);
             return -2;
         }
 
